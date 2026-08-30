@@ -742,26 +742,23 @@ void USwuiSubsystem::Tick(float DeltaTime)
 
 	View->NotifySubsystemTick();
 
-	// Drive continuous browser frame + upload latest full surface if fresh paint exists.
-	View->TickDeferredUpload();
-
+	// 1. Flush game state to JS FIRST so that DOM and animations receive new values
+	// before the compositor renders the visual frame.
 	const bool bCanFlushJs = !View->InstanceSettings.bPauseBrowserUpdates;
 	if (bCanFlushJs && FlushHudStateToJs(DeltaTime))
 	{
 		View->NotifyHudStateFlushed();
 	}
 
+	// 2. Drive continuous browser frame + upload/blit latest surface.
+	View->TickDeferredUpload();
+
 	// ── HUD ROI overlay ─────────────────────────────────────────────────
 	UpdateRoiOverlay();
 
-	// Pump again after JS flush. This gives CEF a chance to process any
-	// ExecuteJavaScript posted tasks and produce OnPaint.
-	SwuiManager::DoSwuiMessageLoop();
-
-	// Final pump for lockstep mode to keep CEF responsive.
+	// 3. Pump again after state flush & render commands to drain CEF tasks.
 	SwuiManager::DoSwuiMessageLoop();
 }
-
 
 bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 {
@@ -776,38 +773,20 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 	const int32 CefFPS = SwuiCVarInt(
 		CVarSwuiHudMaxBrowserFPS.GetValueOnGameThread(),
 		View->InstanceSettings.MaxBrowserFramesPerSecond);
-	const int32 EffectiveFPS = CefFPS > 0 ? CefFPS : View->GetWindowlessFrameRate();
 
 	// Exponential moving average FPS (alpha=0.1, smoothed over ~10 frames)
 	if (DeltaTime > 0.f)
 		AvgFPS = AvgFPS * 0.9f + (1.f / DeltaTime) * 0.1f;
 	LastDeltaTime = DeltaTime;
 
-	// Rate-limit JS state pushes to the CEF frame rate to avoid flooding.
-	{
-		const float MinInterval = EffectiveFPS > 0 ? 1.0f / static_cast<float>(EffectiveFPS) : 1.0f / 120.f;
-		TickAccumulator += DeltaTime;
-		if (TickAccumulator < MinInterval) return false;
-		TickAccumulator = 0.f;
-	}
-
+	const bool bUseBatchStateSync = CVarSwuiBatchStateSync.GetValueOnGameThread() != 0;
 	bool bFlushed = false;
 	FString BatchedScript;
 
-	const FString RuntimeScript = FString::Printf(
-		TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-		TEXT("s._runtime={fps:%.1f,dt:%.4f,cefFps:%d,width:%d,height:%d};")
-		TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
-		TEXT("})()"),
-		AvgFPS, LastDeltaTime,
-		CefFPS, View->Width, View->Height);
-	BatchedScript += RuntimeScript;
-	bFlushed = true;
-
-	if (ObservedProperties.Num() > 0)
+	if (bUseBatchStateSync)
 	{
-		FString Script = TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});");
-		bool bAny = false;
+		// Fast atomic JSON state batch
+		TArray<FString> ChangedEntries;
 		FString LatestCurrentAmmoJs;
 		FString LatestReserveAmmoJs;
 		bool bCurrentAmmoChanged = false;
@@ -827,66 +806,98 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 
 			const FString JSValue = Swui_SerializeProperty(Entry.CachedProp, Obj);
 			if (JSValue.IsEmpty()) continue;
+
 			const FString* PrevValue = LastObservedValues.Find(Entry.NamespacedKey);
 			const bool bChanged = !PrevValue || *PrevValue != JSValue;
 			if (bChanged)
 			{
 				LastObservedValues.Add(Entry.NamespacedKey, JSValue);
-				if (Entry.NamespacedKey.Contains(TEXT("ammo"), ESearchCase::IgnoreCase)
-					|| Entry.NamespacedKey.Contains(TEXT("reload"), ESearchCase::IgnoreCase)
-					|| Entry.NamespacedKey.Contains(TEXT("crosshair"), ESearchCase::IgnoreCase)
-					|| Entry.NamespacedKey.Contains(TEXT("ability"), ESearchCase::IgnoreCase))
+				ChangedEntries.Add(FString::Printf(TEXT("\"%s\":%s"), *Entry.NamespacedKey, *JSValue));
+
+				if (Entry.NamespacedKey.Contains(TEXT("currentammo"), ESearchCase::IgnoreCase))
 				{
+					LatestCurrentAmmoJs = JSValue;
+					bCurrentAmmoChanged = true;
+				}
+				if (Entry.NamespacedKey.Contains(TEXT("reserveammo"), ESearchCase::IgnoreCase))
+				{
+					LatestReserveAmmoJs = JSValue;
+					bReserveAmmoChanged = true;
 				}
 			}
-
-			Script += FString::Printf(
-				TEXT("s.state['%s']=%s;if(s._notify)s._notify('%s',%s);"),
-				*Entry.NamespacedKey, *JSValue,
-				*Entry.NamespacedKey, *JSValue);
-
-			if (Entry.NamespacedKey.Contains(TEXT("compass"), ESearchCase::IgnoreCase)
-				&& Entry.NamespacedKey.Contains(TEXT("angle"), ESearchCase::IgnoreCase)
-				&& bChanged)
-			{
-				Script += FString::Printf(
-					TEXT("if(window.__SWUI_HUD__&&window.__SWUI_HUD__.setCompass)window.__SWUI_HUD__.setCompass(%s);"),
-					*JSValue);
-			}
-
-			if (Entry.NamespacedKey.Contains(TEXT("currentammo"), ESearchCase::IgnoreCase))
-			{
-				LatestCurrentAmmoJs = JSValue;
-				if (bChanged) bCurrentAmmoChanged = true;
-			}
-			if (Entry.NamespacedKey.Contains(TEXT("reserveammo"), ESearchCase::IgnoreCase))
-			{
-				LatestReserveAmmoJs = JSValue;
-				if (bChanged) bReserveAmmoChanged = true;
-			}
-			if (Entry.NamespacedKey.Contains(TEXT("reloading"), ESearchCase::IgnoreCase) && bChanged)
-			{
-				Script += FString::Printf(
-					TEXT("if(window.__SWUI_HUD__&&window.__SWUI_HUD__.setReloading)window.__SWUI_HUD__.setReloading(%s);"),
-					*JSValue);
-			}
-			bAny = true;
 		}
 
-		if ((bCurrentAmmoChanged || bReserveAmmoChanged) && !LatestCurrentAmmoJs.IsEmpty() && !LatestReserveAmmoJs.IsEmpty())
-		{
-			Script += FString::Printf(
-				TEXT("if(window.__SWUI_HUD__&&window.__SWUI_HUD__.setAmmo)window.__SWUI_HUD__.setAmmo(%s,%s);"),
-				*LatestCurrentAmmoJs,
-				*LatestReserveAmmoJs);
-		}
+		FString StateJson = ChangedEntries.Num() > 0
+			? FString::Printf(TEXT("{%s}"), *FString::Join(ChangedEntries, TEXT(",")))
+			: TEXT("{}");
 
-		Script += TEXT("})();");
-		if (bAny)
+		BatchedScript = FString::Printf(
+			TEXT("(function(){")
+			TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
+			TEXT("s._runtime={fps:%.1f,dt:%.4f,cefFps:%d,width:%d,height:%d};")
+			TEXT("if(s._batch){s._batch(%s,s._runtime);}else{")
+			TEXT("var u=%s;for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);}")
+			TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
+			TEXT("}")
+			TEXT("})()"),
+			AvgFPS, LastDeltaTime, CefFPS, View->Width, View->Height,
+			*StateJson, *StateJson);
+
+		bFlushed = true;
+	}
+	else
+	{
+		// Legacy multi-statement fallback
+		const FString RuntimeScript = FString::Printf(
+			TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
+			TEXT("s._runtime={fps:%.1f,dt:%.4f,cefFps:%d,width:%d,height:%d};")
+			TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
+			TEXT("})()"),
+			AvgFPS, LastDeltaTime,
+			CefFPS, View->Width, View->Height);
+		BatchedScript += RuntimeScript;
+		bFlushed = true;
+
+		if (ObservedProperties.Num() > 0)
 		{
-			if (!BatchedScript.IsEmpty()) BatchedScript += TEXT(";");
-			BatchedScript += Script;
-			bFlushed = true;
+			FString Script = TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});");
+			bool bAny = false;
+
+			for (int32 i = ObservedProperties.Num() - 1; i >= 0; --i)
+			{
+				FSwuiObservedProperty& Entry = ObservedProperties[i];
+				if (!Entry.Source.IsValid())
+				{
+					ObservedProperties.RemoveAtSwap(i);
+					continue;
+				}
+
+				UObject* Obj = Entry.Source.Get();
+				if (!Entry.CachedProp) continue;
+
+				const FString JSValue = Swui_SerializeProperty(Entry.CachedProp, Obj);
+				if (JSValue.IsEmpty()) continue;
+				const FString* PrevValue = LastObservedValues.Find(Entry.NamespacedKey);
+				const bool bChanged = !PrevValue || *PrevValue != JSValue;
+				if (bChanged)
+				{
+					LastObservedValues.Add(Entry.NamespacedKey, JSValue);
+				}
+
+				Script += FString::Printf(
+					TEXT("s.state['%s']=%s;if(s._notify)s._notify('%s',%s);"),
+					*Entry.NamespacedKey, *JSValue,
+					*Entry.NamespacedKey, *JSValue);
+				bAny = true;
+			}
+
+			Script += TEXT("})();");
+			if (bAny)
+			{
+				if (!BatchedScript.IsEmpty()) BatchedScript += TEXT(";");
+				BatchedScript += Script;
+				bFlushed = true;
+			}
 		}
 	}
 
@@ -913,9 +924,9 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 	}
 
 	View->ExecuteJavaScript(BatchedScript);
-
 	return bFlushed;
 }
+
 
 void USwuiSubsystem::RequestHudVisualRefresh(float DurationSeconds, bool bForceFullUpload)
 {

@@ -141,3 +141,27 @@
 
 .interactive { pointer-events: auto; }
 .no-interact { pointer-events: none; }
+
+/* ── Hardware Acceleration & Smooth Animation Utilities ───────────────────── */
+
+/* Forces GPU compositor layer promotion (avoids CPU paint passes during animation) */
+.swui-gpu {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+  will-change: transform, opacity;
+}
+
+/* Fast hardware-accelerated animated transitions */
+.swui-anim {
+  transform: translateZ(0);
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+/* Strict layout & paint containment for high-frequency HUD elements (e.g. crosshair, health) */
+.swui-isolate {
+  contain: layout paint style;
+  content-visibility: auto;
+}
+

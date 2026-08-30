@@ -111,12 +111,25 @@ interface SwuiCefQueryRequest {
   onFailure?: (errorCode: number, errorMessage: string) => void;
 }
 
+export interface SwuiRuntimeData {
+  fps: number;
+  dt: number;
+  cefFps: number;
+  width: number;
+  height: number;
+}
+
+
 interface SwuiRuntime {
   state:    Record<string, unknown>;
+  _runtime?: SwuiRuntimeData;
   _notify?: (key: string, value: unknown) => void;
+  _batch?: (batch: Record<string, unknown>, runtime?: SwuiRuntimeData) => void;
+  updateState?: (batch: Record<string, unknown>) => void;
   emitToUnreal?: (message: SwuiOutgoingMessage) => void;
   postMessage?: (message: SwuiOutgoingMessage) => void;
 }
+
 
 interface SwuiWindowExtensions {
   __SWUI__?: SwuiRuntime;
@@ -234,6 +247,8 @@ function postMessage(message: SwuiNativeMessage): void {
 // ── Subscriber map ──────────────────────────────────────────────────────────
 
 const _subs: Record<string, Array<(v: unknown) => void>> = {};
+const _batchSubs: Array<(batch: Record<string, unknown>) => void> = [];
+const _tickSubs: Array<(runtime: SwuiRuntimeData) => void> = [];
 let _patched = false;
 let _warnedMissingOutboundBridge = false;
 let _warnedOutboundSendFailure = false;
@@ -258,6 +273,49 @@ function _warnOutboundSendFailure(message: SwuiOutgoingMessage, error: unknown):
   console.warn("[SWUI] Failed to send outbound message to Unreal.", message, error);
 }
 
+function _notifyBatch(batch: Record<string, unknown>, runtime?: SwuiRuntimeData): void {
+  const rt = _getRuntime();
+  if (rt && batch) {
+    for (const k in batch) {
+      const v = batch[k];
+      rt.state[k] = v;
+      const listeners = _subs[k];
+      if (listeners && listeners.length > 0) {
+        for (let i = 0; i < listeners.length; ++i) {
+          try {
+            listeners[i](v);
+          } catch (err) {
+            console.error('[SWUI] Error in subscriber for', k, err);
+          }
+        }
+      }
+    }
+    if (_batchSubs.length > 0) {
+      for (let i = 0; i < _batchSubs.length; ++i) {
+        try {
+          _batchSubs[i](batch);
+        } catch (err) {
+          console.error('[SWUI] Error in batch subscriber', err);
+        }
+      }
+    }
+  }
+
+  if (runtime) {
+    if (rt) rt._runtime = runtime;
+    if (_tickSubs.length > 0) {
+      for (let i = 0; i < _tickSubs.length; ++i) {
+        try {
+          _tickSubs[i](runtime);
+        } catch (err) {
+          console.error('[SWUI] Error in tick subscriber', err);
+        }
+      }
+    }
+    window.dispatchEvent(new CustomEvent('swui:tick', { detail: runtime }));
+  }
+}
+
 function _patch(): void {
   if (_patched) return;
   _patched = true;
@@ -269,7 +327,16 @@ function _patch(): void {
     _subs[k]?.slice().forEach(fn => fn(v));
     prev?.(k, v);
   };
+
+  rt._batch = (batch: Record<string, unknown>, runtime?: SwuiRuntimeData) => {
+    _notifyBatch(batch, runtime);
+  };
+
+  rt.updateState = (batch: Record<string, unknown>) => {
+    _notifyBatch(batch);
+  };
 }
+
 
 function _whenReady(cb: () => void): void {
   if (_getRuntime()) { _patch(); cb(); return; }
@@ -436,11 +503,49 @@ function onTextInput(fn: (event: SwuiTextEvent) => void): Unsubscribe {
   return _listenEvent<SwuiTextEvent>("swui.keyboard.textInput", fn);
 }
 
+
+/**
+ * Subscribe to batched state changes in a single callback.
+ */
+function onBatch(fn: (batch: Record<string, unknown>) => void): Unsubscribe {
+  _batchSubs.push(fn);
+  _whenReady(() => {
+    const snap = _getRuntime()?.state;
+    if (snap && Object.keys(snap).length > 0) fn(snap);
+  });
+  return () => {
+    const idx = _batchSubs.indexOf(fn);
+    if (idx !== -1) _batchSubs.splice(idx, 1);
+  };
+}
+
+/**
+ * Subscribe to synchronized frame ticks from Unreal Engine.
+ */
+function onTick(fn: (runtime: SwuiRuntimeData) => void): Unsubscribe {
+  _tickSubs.push(fn);
+  _whenReady(() => {
+    const r = _getRuntime()?._runtime;
+    if (r) fn(r);
+  });
+  return () => {
+    const idx = _tickSubs.indexOf(fn);
+    if (idx !== -1) _tickSubs.splice(idx, 1);
+  };
+}
+
+/**
+ * Directly update state values locally or simulate game state.
+ */
+function updateState(batch: Record<string, unknown>): void {
+  _notifyBatch(batch);
+}
+
 // ── Export ──────────────────────────────────────────────────────────────────
 
 const Swui = {
-  // State
-  on, get, getAll,
+  // State & Sync
+  on, onBatch, onTick, get, getAll, updateState,
   // Navigation — subscribe
   onEvent, onNavigate, onConfirm, onCancel, onNextTab, onPreviousTab,
   postMessage,
@@ -451,4 +556,5 @@ const Swui = {
   onKeyDown, onKeyUp, onTextInput,
 };
 export default Swui;
-export { postMessage, emitNavigationEvent };
+export { postMessage, emitNavigationEvent, onBatch, onTick, updateState };
+

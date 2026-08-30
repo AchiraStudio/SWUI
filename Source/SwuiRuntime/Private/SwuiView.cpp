@@ -31,6 +31,13 @@
 #include "SwuiFullSurfaceCpuRenderer.h"
 #include "SwuiSettings.h"
 
+#if PLATFORM_WINDOWS
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#include "Windows/HideWindowsPlatformTypes.h"
+#endif
+
 struct FSwuiViewCefData
 {
 	CefRefPtr<BrowserClient> Client;
@@ -39,7 +46,7 @@ struct FSwuiViewCefData
 
 // ---------------------------------------------------------------------------
 // CEF task: execute optional JS, optionally invalidate, optionally send an
-// external begin frame.
+// external begin frame with synchronized compositor scheduler.
 // ---------------------------------------------------------------------------
 class FSwuiFlushAndBeginFrameTask : public CefTask
 {
@@ -72,17 +79,19 @@ public:
 			}
 		}
 
-		if (bSendBeginFrame)
+		CefRefPtr<CefBrowserHost> Host = Browser->GetHost();
+		if (Host)
 		{
-			CefRefPtr<CefBrowserHost> Host = Browser->GetHost();
-			if (Host)
+			if (bSendBeginFrame)
 			{
-				if (bInvalidateView)
-				{
-					Host->Invalidate(PET_VIEW);
-				}
-
+				// In external begin-frame mode, stepping the compositor produces
+				// the paint naturally without throwing away compositor dirty tracking.
 				Host->SendExternalBeginFrame();
+			}
+			else if (bInvalidateView)
+			{
+				// Fallback invalidate only when external begin frame is not active
+				Host->Invalidate(PET_VIEW);
 			}
 		}
 	}
@@ -95,6 +104,7 @@ private:
 
 	IMPLEMENT_REFCOUNTING(FSwuiFlushAndBeginFrameTask);
 };
+
 
 USwuiView::USwuiView()
 {
@@ -187,14 +197,15 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 	const int32 HudLockstepOverride = CVarSwuiHudLockstep.GetValueOnGameThread();
 	const int32 HudExternalBeginFrameOverride = CVarSwuiHudExternalBeginFrames.GetValueOnGameThread();
 	const int32 HudMaxBrowserFpsOverride = CVarSwuiHudMaxBrowserFPS.GetValueOnGameThread();
+	const int32 FramePacingOverride = CVarSwuiFramePacing.GetValueOnGameThread();
 
-	const bool bHudLockstepEnabled = SwuiCVarBool(
+	const bool bHudLockstepEnabled = (FramePacingOverride == 1) || (FramePacingOverride < 0 && SwuiCVarBool(
 		HudLockstepOverride,
-		InstanceSettings.bUseUEFrameLockedBrowser);
+		InstanceSettings.bUseUEFrameLockedBrowser));
 
-	const bool bExternalBeginFramesEnabled = SwuiCVarBool(
+	const bool bExternalBeginFramesEnabled = (FramePacingOverride == 1) || (FramePacingOverride < 0 && SwuiCVarBool(
 		HudExternalBeginFrameOverride,
-		InstanceSettings.bUseExternalBeginFrames);
+		InstanceSettings.bUseExternalBeginFrames));
 
 	const int32 InitHudMaxBrowserFps = SwuiCVarInt(
 		HudMaxBrowserFpsOverride,
@@ -207,29 +218,51 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 
 	Info.external_begin_frame_enabled = bWantsExternalBeginFrames ? 1 : 0;
 
-	// Clean renderer path: CPU-compatible full-surface upload only.
+	// Check GPU Acceleration setting & platform capability
+	const int32 GpuOverride = CVarSwuiGpuAccelerated.GetValueOnGameThread();
+	const bool bWantsGpu = (GpuOverride == 1) || (GpuOverride < 0 && (
+		InstanceSettings.RenderingMode == ESwuiRenderingMode::GpuAccelerated ||
+		InstanceSettings.RenderingMode == ESwuiRenderingMode::Auto));
+
+#if PLATFORM_WINDOWS
+	const bool bD3DSupported = GDynamicRHI && (GDynamicRHI->GetName() == TEXT("D3D11") || GDynamicRHI->GetName() == TEXT("D3D12"));
+	if (bWantsGpu && bD3DSupported)
+	{
+		Info.shared_texture_enabled = 1;
+		ResolvedRenderingMode = ESwuiRenderingMode::GpuAccelerated;
+	}
+	else
+	{
+		Info.shared_texture_enabled = 0;
+		ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
+	}
+#else
+	Info.shared_texture_enabled = 0;
 	ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
+#endif
 
 	if (bVerboseLog)
 	{
-		const ESwuiRenderingMode RequestedMode = InstanceSettings.RenderingMode;
 		UE_LOG(LogSwuiRuntime, Log,
-			TEXT("[SWUI RENDER] Resolved mode: CPU FullSurface (requested=%d)"),
-			(int32)RequestedMode);
+			TEXT("[SWUI RENDER] Resolved mode: %s (requested=%d, shared_texture=%d)"),
+			ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated ? TEXT("GPU Accelerated (Shared Texture Zero-Copy)") : TEXT("CPU Compatible (FullSurface)"),
+			(int32)InstanceSettings.RenderingMode,
+			Info.shared_texture_enabled);
 	}
 
 	CefBrowserSettings BrowserSettings;
 	BrowserSettings.webgl = STATE_ENABLED;
 
 	ISwuiRenderTarget* CpuTarget = static_cast<ISwuiRenderTarget*>(this);
+	ISwuiAcceleratedRenderTarget* GpuTarget = (ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated)
+		? static_cast<ISwuiAcceleratedRenderTarget*>(this)
+		: nullptr;
 
-	// Keep constructor shape compatible with the current RenderHandler API.
-	// GPU target is intentionally null in the cleaned full-surface CPU path.
 	RenderHandler* Renderer = new RenderHandler(
 		Width,
 		Height,
 		CpuTarget,
-		nullptr,
+		GpuTarget,
 		ResolvedRenderingMode);
 
 	CefRefPtr<BrowserClient> Client = new BrowserClient(Renderer, this);
@@ -251,10 +284,14 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 
 	int32 TargetFPS = 300;
 	int32 DetectedMonitorHz = 240;
+	if (GEngine)
+	{
 		DetectedMonitorHz = FMath::RoundToInt(GEngine->GetMaxFPS());
 	}
 	if (InstanceSettings.OverrideFrameRate > 0)
 	{
+		TargetFPS = InstanceSettings.OverrideFrameRate;
+	}
 	else if (Settings && Settings->DefaultViewFrameRate > 0)
 	{
 		TargetFPS = Settings->DefaultViewFrameRate;
@@ -263,8 +300,11 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 	{
 		TargetFPS = InitHudMaxBrowserFps;
 	}
+	else
 	{
-		TargetFPS = FMath::Clamp(DetectedMonitorHz, 60, 360);
+		TargetFPS = FMath::Clamp(DetectedMonitorHz > 0 ? DetectedMonitorHz : 240, 60, 360);
+	}
+
 
 	{
 		VerbosePaintVar->Set(bWantVerbose ? 1 : 0, ECVF_SetByCode);
@@ -670,7 +710,7 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 
 		LastExternalBeginFrameSentTime = Now;
 
-		const bool bInvalidateViewForThisFrame = bForceFrame || bHasScript;
+		const bool bInvalidateViewForThisFrame = !bWillSendBeginFrame && (bForceFrame || bHasScript);
 
 		if (bInvalidateViewForThisFrame)
 		{
@@ -694,7 +734,7 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 			: std::string();
 
 		const bool bInvalidateViewForThisFrame =
-			bWillSendBeginFrame && (bForceFrame || bHasScript);
+			!bWillSendBeginFrame && (bForceFrame || bHasScript);
 
 		CefPostTask(
 			TID_UI,
@@ -704,6 +744,7 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 				bInvalidateViewForThisFrame,
 				bWillSendBeginFrame));
 	}
+
 
 	return bWillSendBeginFrame;
 }
@@ -796,6 +837,101 @@ void USwuiView::OnPaint(
 	}
 
 	FMemory::Free(Regions);
+}
+
+void USwuiView::OnAcceleratedPaint(
+	void* SharedHandle,
+	int32 InWidth,
+	int32 InHeight)
+{
+	GetOrCreateTexture(InWidth, InHeight);
+
+	if (!Texture || !Texture->GetResource() || !SharedHandle)
+	{
+		return;
+	}
+
+	if (InstanceSettings.bSkipOnPaintProcessing || InstanceSettings.bFreezeTexture)
+	{
+		return;
+	}
+
+	const double PaintNow = FPlatformTime::Seconds();
+
+	{
+		FScopeLock Lock(&PaintMutex);
+
+		LastPaintArrivalTime = PaintNow;
+		PendingFreshPaintArrivalTime = PaintNow;
+
+		if (PendingBeginFrameSentTime > 0.0)
+		{
+			const double PaintAfterBeginMs = (PaintNow - PendingBeginFrameSentTime) * 1000.0;
+
+			Stat_PaintAfterBeginFrameMsSum += PaintAfterBeginMs;
+			Stat_PaintAfterBeginFrameMsMax = FMath::Max(
+				Stat_PaintAfterBeginFrameMsMax,
+				PaintAfterBeginMs);
+			++Stat_PaintAfterBeginFrameSamples;
+
+			bPaintArrivedAfterExternalBeginFrame = true;
+
+			if (bPendingInvalidateForPaint)
+			{
+				++Stat_PaintsAfterInvalidate;
+				bPendingInvalidateForPaint = false;
+			}
+
+			PendingBeginFrameSentTime = -1.0;
+		}
+
+		bHasPendingFullSurfacePaint = true;
+	}
+
+#if PLATFORM_WINDOWS
+	FTextureResource* TexRes = static_cast<FTextureResource*>(Texture->GetResource());
+	HANDLE HandleCopy = static_cast<HANDLE>(SharedHandle);
+
+	ENQUEUE_RENDER_COMMAND(SwuiGpuSharedTextureBlit)(
+		[TexRes, HandleCopy](FRHICommandListImmediate& RHICmdList)
+		{
+			if (!TexRes || !TexRes->TextureRHI)
+			{
+				return;
+			}
+
+			FRHITexture* DestRHI = TexRes->TextureRHI.GetReference();
+			if (!DestRHI)
+			{
+				return;
+			}
+
+			if (GDynamicRHI && GDynamicRHI->GetName() == TEXT("D3D11"))
+			{
+				ID3D11Device* Device = static_cast<ID3D11Device*>(GDynamicRHI->RHIGetNativeDevice());
+				if (Device)
+				{
+					ID3D11Texture2D* SharedTex = nullptr;
+					HRESULT hr = Device->OpenSharedResource(HandleCopy, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&SharedTex));
+					if (SUCCEEDED(hr) && SharedTex)
+					{
+						ID3D11Texture2D* NativeDst = static_cast<ID3D11Texture2D*>(DestRHI->GetNativeResource());
+						if (NativeDst)
+						{
+							ID3D11DeviceContext* Context = nullptr;
+							Device->GetImmediateContext(&Context);
+							if (Context)
+							{
+								Context->CopyResource(NativeDst, SharedTex);
+								Context->Release();
+							}
+						}
+						SharedTex->Release();
+					}
+				}
+			}
+		});
+#endif
 }
 
 void USwuiView::TickDeferredUpload()
@@ -925,8 +1061,10 @@ void USwuiView::DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTic
 	TargetFpsForLog = TargetHz;
 
 	const double MinInterval = 1.0 / static_cast<double>(TargetHz);
+	// 1.5ms tolerance margin avoids dropping frames due to minor sub-millisecond tick fluctuations
+	const double Tolerance = FMath::Min(0.0015, MinInterval * 0.15);
 
-	if (LastBrowserFrameTime <= 0.0 || (Now - LastBrowserFrameTime) >= MinInterval)
+	if (LastBrowserFrameTime <= 0.0 || (Now - LastBrowserFrameTime) >= (MinInterval - Tolerance))
 	{
 		FlushHudStateAndRequestBrowserFrame(FString(), static_cast<float>(DeltaSeconds), false);
 		LastBrowserFrameTime = Now;
