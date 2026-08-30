@@ -1,0 +1,24 @@
+{
+  "name": "@simplewebui/client",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/swui.js",
+  "module": "dist/swui.esm.js",
+  "types": "dist/swui.d.ts",
+  "exports": {
+    ".":              { "import": "./dist/swui.esm.js", "require": "./dist/swui.js", "types": "./dist/swui.d.ts" },
+    "./src/*":        "./src/*"
+  },
+  "scripts": {
+    "build": "node node_modules/vite/bin/vite.js build",
+    "dev":   "tsc --watch --noEmit"
+  },
+  "devDependencies": {
+    "typescript":      "^5.4.0",
+    "vite":            "^5.2.0",
+    "vite-plugin-dts": "^3.9.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}

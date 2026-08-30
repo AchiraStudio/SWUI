@@ -1,0 +1,20 @@
+using UnrealBuildTool;
+using System.IO;
+using System;
+
+public class SwuiLoader : ModuleRules
+{
+	public SwuiLoader(ReadOnlyTargetRules Target) : base(Target)
+    {
+		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+
+        PublicDependencyModuleNames.AddRange(
+			new string[]
+		{
+			"Core",
+			"CoreUObject",
+			"Engine",
+			"Projects"
+		});
+	}
+}

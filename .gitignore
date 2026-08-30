@@ -1,0 +1,8 @@
+# Compiled source files for the engine to use
+Intermediate/*
+Binaries/*
+ThirdParty/cef/Win/*
+Build/*
+Saved/*
+DerivedDataCache/*
+build-loop.ps1

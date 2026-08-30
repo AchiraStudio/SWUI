@@ -1,0 +1,58 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "HAL/IConsoleManager.h"
+
+// HUD / frame driving
+extern TAutoConsoleVariable<int32> CVarSwuiHudLockstep;
+extern TAutoConsoleVariable<int32> CVarSwuiHudExternalBeginFrames;
+extern TAutoConsoleVariable<int32> CVarSwuiHudSendExternalBeginFrameFromTick;
+extern TAutoConsoleVariable<int32> CVarSwuiHudFlushBeforeFrame;
+extern TAutoConsoleVariable<int32> CVarSwuiHudMaxBrowserFPS;
+
+// Paint / upload
+extern TAutoConsoleVariable<int32> CVarSwuiPaintHybridDirtyUpload;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintTileDiffLargeRects;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintUploadBudget;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintMaxNormalUploadBytes;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintTileWidth;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintTileHeight;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintMinDirtyRectWidth;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintMinDirtyRectHeight;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintCenterCritical;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintCenterCriticalWidth;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintCenterCriticalHeight;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintRotatingCursor;
+extern TAutoConsoleVariable<int32> CVarSwuiPaintFullBaseline;
+
+// Debug
+extern TAutoConsoleVariable<int32> CVarSwuiDebugLogPaintStats;
+extern TAutoConsoleVariable<int32> CVarSwuiDebugShowDirtyRects;
+extern TAutoConsoleVariable<int32> CVarSwuiDebugForceFullFrameUploadEveryFrame;
+
+// UI resolution presets
+extern TAutoConsoleVariable<int32> CVarSwuiUiResolutionPreset;
+extern TAutoConsoleVariable<int32> CVarSwuiCustomUiWidth;
+extern TAutoConsoleVariable<int32> CVarSwuiCustomUiHeight;
+
+// Profiling helpers
+extern TAutoConsoleVariable<int32> CVarSwuiNoTextureUpload;
+extern TAutoConsoleVariable<int32> CVarSwuiVerbosePaint;
+
+// Performance & Synchronization
+extern TAutoConsoleVariable<int32> CVarSwuiGpuAccelerated;
+extern TAutoConsoleVariable<int32> CVarSwuiFramePacing;
+extern TAutoConsoleVariable<int32> CVarSwuiBatchStateSync;
+
+// HUD ROI
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiEnabled;
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiX;
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiY;
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiW;
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiH;
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiCenterEnabled;
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiCenterSize;
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiOverlay;
+extern TAutoConsoleVariable<int32> CVarSwuiHudRoiShadeInactive;
+
+
