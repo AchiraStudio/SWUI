@@ -28,27 +28,28 @@ SWUI lets UE developers expose reflected game state and gameplay events to web-b
 
 | ID | Story | Progress |
 |---|---|---|
-| UE-1 | Create a SWUI interface from an HTML entry file | `[ ]` |
-| UE-2 | Show a SWUI interface as a HUD/menu in Unreal | `[ ]` |
-| UE-3 | Bind reflected Unreal properties to the interface | `[ ]` |
-| UE-4 | Bind reflected Unreal events/delegates to the interface | `[ ]` |
-| UE-5 | Generate frontend TypeScript bindings and stubs from Unreal bindings | `[ ]` |
-| UE-5a | Auto-derive TypeScript codegen from Blueprint graph (no manual class picker) | `[ ]` |
-| UE-6 | Preview the bound UI contract from Unreal metadata | `[ ]` |
+
+| UE-1 | Create a SWUI interface from an HTML entry file | `[x]` |
+| UE-2 | Show a SWUI interface as a HUD/menu in Unreal | `[x]` |
+| UE-3 | Bind reflected Unreal properties to the interface | `[x]` |
+| UE-4 | Bind reflected Unreal events/delegates to the interface | `[x]` |
+| UE-5 | Generate frontend TypeScript bindings and stubs from Unreal bindings | `[x]` |
+| UE-5a | Auto-derive TypeScript codegen from Blueprint graph (no manual class picker) | `[x]` |
+| UE-6 | Preview the bound UI contract from Unreal metadata | `[/]` |
 | UE-7 | Validate the UE workflow with the dynamic crosshair sample | `[D]` |
 
 ## Web/UI Developer Stories
 
 | ID | Story | Progress |
 |---|---|---|
-| WEB-1 | Receive generated TypeScript facade and stubs | `[ ]` |
-| WEB-2 | Use autocomplete for state fields and events | `[ ]` |
-| WEB-3 | Bind generated state fields to HTML/CSS behavior | `[ ]` |
-| WEB-4 | Handle generated gameplay events in TypeScript | `[ ]` |
-| WEB-5 | Design and iterate in the dedicated SWUI preview window | `[ ]` |
-| WEB-6 | Manipulate preview values through generated controls | `[ ]` |
-| WEB-7 | Trigger preview events through generated controls | `[ ]` |
-| WEB-8 | Use the same UI code in preview and Unreal runtime | `[ ]` |
+| WEB-1 | Receive generated TypeScript facade and stubs | `[x]` |
+| WEB-2 | Use autocomplete for state fields and events | `[x]` |
+| WEB-3 | Bind generated state fields to HTML/CSS behavior | `[x]` |
+| WEB-4 | Handle generated gameplay events in TypeScript | `[x]` |
+| WEB-5 | Design and iterate in the dedicated SWUI preview window | `[/]` |
+| WEB-6 | Manipulate preview values through generated controls | `[/]` |
+| WEB-7 | Trigger preview events through generated controls | `[/]` |
+| WEB-8 | Use the same UI code in preview and Unreal runtime | `[x]` |
 | WEB-9 | Validate the web workflow with the dynamic crosshair sample | `[D]` |
 
 ---
@@ -66,7 +67,7 @@ Create SWUI Interface
   Name: MainHUD
   Entry: hud
 
-````
+```
 
 The `.html` extension is implicit, so `hud` resolves to `hud.html`.
 
@@ -77,7 +78,7 @@ Expected behavior:
 * SWUI knows which web UI file belongs to the interface.
 * The interface becomes available for HUD/menu usage.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -102,7 +103,7 @@ Expected behavior:
 * I can configure basic display settings such as resolution, layer, and Z order.
 * The selected web UI renders through the bundled CEF backend.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -129,7 +130,7 @@ Expected behavior:
 * SWUI infers useful preview metadata such as ranges and enum values.
 * The selected state fields become part of the generated frontend API.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -153,7 +154,7 @@ Expected behavior:
 * SWUI infers event payload fields.
 * The selected events become part of the generated frontend API.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -169,7 +170,7 @@ Expected behavior:
 * The generated files reflect the current Unreal binding setup.
 * The web side gets autocomplete for state and events.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -194,7 +195,8 @@ Expected behavior:
 * `CodegenSourceClass` field is removed from `USwui` entirely — the graph is the source of truth.
 * `ExposedProperties` checklist is retained as a visual manifest and override list.
 
-Progress: `[ ]`
+Progress: `[x]`
+
 
 ***
 
@@ -268,7 +270,7 @@ Expected behavior:
 * User-owned stubs give me a starting point.
 * Generated files match the Unreal-side interface contract.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -296,7 +298,7 @@ Expected behavior:
 * Event payloads are typed.
 * Renamed Unreal bindings are reflected in generated TypeScript.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -325,7 +327,7 @@ Expected behavior:
 * DOM/CSS helpers are simple and generic.
 * Custom watchers are available for custom animation logic.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -352,7 +354,7 @@ Expected behavior:
 * Events can trigger animations, flashes, sound indicators, hitmarkers, or menu reactions.
 * Event code works in both preview and Unreal runtime.
 
-Progress: `[ ]`
+Progress: `[x]`
 
 ***
 
@@ -376,7 +378,7 @@ Expected behavior:
 * The preview loads the generated interface contract.
 * I can iterate on visual design quickly.
 
-Progress: `[ ]`
+Progress: `[/]`
 
 ***
 
@@ -401,7 +403,7 @@ Expected behavior:
 * Preview controls match the inferred Unreal value types.
 * Numeric ranges follow Unreal metadata where available.
 
-Progress: `[ ]`
+Progress: `[/]`
 
 ***
 
@@ -424,7 +426,7 @@ Expected behavior:
 * Events with payloads provide editable payload fields.
 * Preview event behavior matches runtime event behavior.
 
-Progress: `[ ]`
+Progress: `[/]`
 
 ***
 
@@ -439,7 +441,8 @@ Expected behavior:
 * State bindings behave the same in both contexts.
 * Event handlers behave the same in both contexts.
 
-Progress: `[ ]`
+Progress: `[x]`
+
 
 ***
 
