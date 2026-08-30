@@ -225,9 +225,8 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		InstanceSettings.RenderingMode == ESwuiRenderingMode::Auto));
 
 #if PLATFORM_WINDOWS
-	const bool bD3DSupported = GDynamicRHI && (FCString::Strcmp(GDynamicRHI->GetName(), TEXT("D3D11")) == 0 || FCString::Strcmp(GDynamicRHI->GetName(), TEXT("D3D12")) == 0);
-	if (bWantsGpu && bD3DSupported)
-
+	const bool bIsD3D11 = GDynamicRHI && (FCString::Strcmp(GDynamicRHI->GetName(), TEXT("D3D11")) == 0);
+	if (bWantsGpu && bIsD3D11)
 	{
 		Info.shared_texture_enabled = 1;
 		ResolvedRenderingMode = ESwuiRenderingMode::GpuAccelerated;
@@ -238,6 +237,7 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
 	}
 #else
+
 	Info.shared_texture_enabled = 0;
 	ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
 #endif

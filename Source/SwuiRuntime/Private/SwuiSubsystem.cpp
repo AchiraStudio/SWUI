@@ -349,11 +349,23 @@ void USwuiSubsystem::InitRenderer(const FString& URI, const FString& InterfaceNa
 	Widget = CreateWidget<UUserWidget>(World, USwuiWidget::StaticClass());
 	if (!Widget) return;
 
-	UCanvasPanel* RootPanel = NewObject<UCanvasPanel>(Widget);
+	if (!Widget->WidgetTree)
+	{
+		Widget->WidgetTree = NewObject<UWidgetTree>(Widget, TEXT("WidgetTree"));
+	}
+
+	UCanvasPanel* RootPanel = Widget->WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("RootPanel"));
 	RootPanel->bIsVariable = false;
 
-	UImage* Image = NewObject<UImage>(Widget);
-	Image->SetBrushFromTexture(View->GetTexture());
+	UImage* Image = Widget->WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("SwuiImage"));
+	if (View && View->GetTexture())
+	{
+		Image->SetBrushFromTexture(View->GetTexture());
+	}
+	else if (View && View->BaseMaterial)
+	{
+		Image->SetBrushFromMaterial(View->BaseMaterial);
+	}
 	FSlateBrush Brush = Image->GetBrush();
 	Brush.ImageSize = FVector2D(FinalWidth, FinalHeight);
 	Brush.DrawAs    = ESlateBrushDrawType::Image;
@@ -380,11 +392,9 @@ void USwuiSubsystem::InitRenderer(const FString& URI, const FString& InterfaceNa
 	Widget->WidgetTree->RootWidget = RootPanel;
 	Widget->SetIsFocusable(false);
 	Widget->AddToViewport(ZOrder);
-	if (InstanceSettings.bHideDrawComponent)
-		Widget->SetVisibility(ESlateVisibility::Collapsed);
+	Widget->SetVisibility(InstanceSettings.bHideDrawComponent ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 	// State is now pushed every engine frame via FTickableGameObject::Tick
 }
-
 void USwuiSubsystem::ShutdownRenderer()
 {
 	DestroyRoiOverlay();

@@ -1,8 +1,9 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "1.0.0",
+	"Version": 2,
+	"VersionName": "1.1.0",
 	"FriendlyName": "SimpleWebUI",
+
 	"Description": "Modern web UI layer for Unreal Engine powered by CEF.",
 	"Category": "UI",
 	"CreatedBy": "SWUI",
