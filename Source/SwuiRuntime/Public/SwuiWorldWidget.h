@@ -116,7 +116,8 @@ public:
 		bool bIsMove,
 		bool bIsDown,
 		bool bIsUp,
-		FKey MouseButton = EKeys::LeftMouseButton);
+		FKey MouseButton);
+
 
 	/**
 	 * Forward a scroll event at the given UV position to the CEF browser.

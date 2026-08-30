@@ -225,8 +225,9 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		InstanceSettings.RenderingMode == ESwuiRenderingMode::Auto));
 
 #if PLATFORM_WINDOWS
-	const bool bD3DSupported = GDynamicRHI && (GDynamicRHI->GetName() == TEXT("D3D11") || GDynamicRHI->GetName() == TEXT("D3D12"));
+	const bool bD3DSupported = GDynamicRHI && (FCString::Strcmp(GDynamicRHI->GetName(), TEXT("D3D11")) == 0 || FCString::Strcmp(GDynamicRHI->GetName(), TEXT("D3D12")) == 0);
 	if (bWantsGpu && bD3DSupported)
+
 	{
 		Info.shared_texture_enabled = 1;
 		ResolvedRenderingMode = ESwuiRenderingMode::GpuAccelerated;
@@ -305,17 +306,8 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		TargetFPS = FMath::Clamp(DetectedMonitorHz > 0 ? DetectedMonitorHz : 240, 60, 360);
 	}
 
-
-	{
-		VerbosePaintVar->Set(bWantVerbose ? 1 : 0, ECVF_SetByCode);
-	}
-
-	if (IConsoleVariable* NoTextureUploadVar = CVarSwuiNoTextureUpload.operator->())
-	{
-		NoTextureUploadVar->Set(bWantNoUpload ? 1 : 0, ECVF_SetByCode);
-	}
-
 	CefRefPtr<CefBrowserHost> Host = Browser->GetHost();
+
 	if (!Host)
 	{
 		UE_LOG(LogSwuiRuntime, Error,
@@ -534,10 +526,78 @@ bool USwuiView::HandleIncomingMessage(const FString& MessageJson)
 	return true;
 }
 
+bool USwuiView::HandleIncomingQuery(const FString& QueryJson, FString& OutResponseJson)
+{
+	TSharedPtr<FJsonObject> QueryObject;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(QueryJson);
+
+	if (!FJsonSerializer::Deserialize(Reader, QueryObject) || !QueryObject.IsValid())
+	{
+		OutResponseJson = TEXT("{\"error\":\"Invalid JSON\"}");
+		return false;
+	}
+
+	FString QueryName;
+	if (!QueryObject->TryGetStringField(TEXT("name"), QueryName) || QueryName.IsEmpty())
+	{
+		QueryObject->TryGetStringField(TEXT("query"), QueryName);
+	}
+
+	if (QueryName.IsEmpty())
+	{
+		OutResponseJson = TEXT("{\"error\":\"Missing query name\"}");
+		return false;
+	}
+
+	AActor* OwnerActor = ResolveOwningActor();
+	if (OwnerActor)
+	{
+		UFunction* Func = OwnerActor->FindFunction(FName(*QueryName));
+		if (Func && (Func->FunctionFlags & FUNC_BlueprintCallable))
+		{
+			FProperty* ReturnProp = Func->GetReturnProperty();
+			if (ReturnProp)
+			{
+				uint8* Buffer = (uint8*)FMemory_Alloca(Func->ParmsSize);
+				FMemory::Memzero(Buffer, Func->ParmsSize);
+				OwnerActor->ProcessEvent(Func, Buffer);
+
+				if (FBoolProperty* BoolProp = CastField<FBoolProperty>(ReturnProp))
+				{
+					const bool bVal = BoolProp->GetPropertyValue_InContainer(Buffer);
+					OutResponseJson = bVal ? TEXT("true") : TEXT("false");
+					return true;
+				}
+				else if (FNumericProperty* NumProp = CastField<FNumericProperty>(ReturnProp))
+				{
+					if (NumProp->IsFloatingPoint())
+					{
+						OutResponseJson = FString::SanitizeFloat(NumProp->GetFloatingPointPropertyValue(ReturnProp->ContainerPtrToValuePtr<void>(Buffer)));
+					}
+					else
+					{
+						OutResponseJson = FString::Printf(TEXT("%lld"), NumProp->GetSignedIntPropertyValue(ReturnProp->ContainerPtrToValuePtr<void>(Buffer)));
+					}
+					return true;
+				}
+				else if (FStrProperty* StrProp = CastField<FStrProperty>(ReturnProp))
+				{
+					OutResponseJson = FString::Printf(TEXT("\"%s\""), *StrProp->GetPropertyValue_InContainer(Buffer));
+					return true;
+				}
+			}
+		}
+	}
+
+	OutResponseJson = TEXT("{\"status\":\"ok\"}");
+	return true;
+}
+
 void USwuiView::NotifyHudStateFlushed()
 {
 	++Stat_HudStateFlushes;
 }
+
 
 void USwuiView::NotifySubsystemTick()
 {
@@ -774,7 +834,13 @@ void USwuiView::OnPaint(
 {
 	GetOrCreateTexture(InWidth, InHeight);
 
-	if (!Texture || !Texture->GetResource())
+	// Texture is null on the very first frame, or briefly mid-resize while
+	// the game thread catches up to a size CEF already reported (see
+	// GetOrCreateTexture). Drop this frame's pixels rather than staging into
+	// a texture that doesn't match — the next CEF paint after the resize
+	// lands will stage cleanly.
+	if (!Texture || !Texture->GetResource() ||
+		Texture->GetSizeX() != InWidth || Texture->GetSizeY() != InHeight)
 	{
 		FMemory::Free(Regions);
 		return;
@@ -846,7 +912,13 @@ void USwuiView::OnAcceleratedPaint(
 {
 	GetOrCreateTexture(InWidth, InHeight);
 
-	if (!Texture || !Texture->GetResource() || !SharedHandle)
+	if (!SharedHandle)
+	{
+		return;
+	}
+
+	FTextureResource* TexRes = BlitTargetResource.load(std::memory_order_acquire);
+	if (!TexRes)
 	{
 		return;
 	}
@@ -889,7 +961,6 @@ void USwuiView::OnAcceleratedPaint(
 	}
 
 #if PLATFORM_WINDOWS
-	FTextureResource* TexRes = static_cast<FTextureResource*>(Texture->GetResource());
 	HANDLE HandleCopy = static_cast<HANDLE>(SharedHandle);
 
 	ENQUEUE_RENDER_COMMAND(SwuiGpuSharedTextureBlit)(
@@ -906,7 +977,7 @@ void USwuiView::OnAcceleratedPaint(
 				return;
 			}
 
-			if (GDynamicRHI && GDynamicRHI->GetName() == TEXT("D3D11"))
+			if (GDynamicRHI && FCString::Strcmp(GDynamicRHI->GetName(), TEXT("D3D11")) == 0)
 			{
 				ID3D11Device* Device = static_cast<ID3D11Device*>(GDynamicRHI->RHIGetNativeDevice());
 				if (Device)
@@ -931,6 +1002,8 @@ void USwuiView::OnAcceleratedPaint(
 				}
 			}
 		});
+
+	BlitGeneration.fetch_add(1, std::memory_order_release);
 #endif
 }
 
@@ -940,7 +1013,35 @@ void USwuiView::TickDeferredUpload()
 	++Stat_ViewUploadTicks;
 
 	const bool bDebugForceEveryTick = IsForceFullFrameMode();
+
+	// Pick up any size CEF reported from its renderer thread since our last
+	// tick and (re)create the texture here, safely on the game thread.
+	ApplyPendingTextureResize();
+
+	// In GPU accelerated mode: check if a fresh blit has completed and swap front/back buffers.
+	if (ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated)
+	{
+		const uint64 CurGen = BlitGeneration.load(std::memory_order_acquire);
+		if (CurGen != LastConsumedBlitGeneration && BackTexture && Texture)
+		{
+			Swap(Texture, BackTexture);
+			LastConsumedBlitGeneration = CurGen;
+
+			if (BackTexture->GetResource())
+			{
+				BlitTargetResource.store(static_cast<FTextureResource*>(BackTexture->GetResource()), std::memory_order_release);
+			}
+
+			if (MaterialInstance)
+			{
+				MaterialInstance->SetTextureParameterValue(TextureParameterName, Texture);
+			}
+		}
+	}
+
 	DriveContinuousBrowserFrame(Now, bDebugForceEveryTick);
+
+
 
 	if (!Texture || !Texture->GetResource())
 	{
@@ -1107,7 +1208,9 @@ void USwuiView::UpdateHudRoiSettings(const FSwuiHudRoiSettings& NewSettings)
 	}
 
 	HudRoiSettings = Resolved;
+	RequestBrowserVisualRefresh(true);
 }
+
 
 void USwuiView::SetMenuInputActive(bool bActive)
 {
@@ -1453,6 +1556,36 @@ void USwuiView::ResetFullSurfaceStats()
 
 UTexture2D* USwuiView::GetOrCreateTexture(int32 InWidth, int32 InHeight)
 {
+	// OnPaint/OnAcceleratedPaint fire on the CEF renderer thread (see
+	// RenderHandler.h). Creating/destroying UTexture2D here unconditionally
+	// used to mean CreateTransient/AddToRoot/UpdateResource/MarkAsGarbage
+	// could run off the game thread whenever CEF's reported size changed
+	// (window resize, first paint, DPI change) — unsafe UObject/GC access
+	// that raced with the game thread and was the likely source of the
+	// intermittent frame-sync stutter, since it only misfired on resize.
+	//
+	// If we're already on the game thread (e.g. a direct call from
+	// TickDeferredUpload's resize poll), it's safe to resize immediately.
+	// Otherwise we just record the requested size; ApplyPendingTextureResize()
+	// picks it up on the next game-thread tick. Callers on the CEF thread
+	// must treat a null/mismatched-size Texture as "not ready this frame"
+	// and skip staging/blitting.
+	if (IsInGameThread())
+	{
+		ApplyTextureResizeImmediate(InWidth, InHeight);
+		return Texture;
+	}
+
+	FScopeLock Lock(&PaintMutex);
+	PendingRequestedWidth = InWidth;
+	PendingRequestedHeight = InHeight;
+	return Texture;
+}
+
+void USwuiView::ApplyTextureResizeImmediate(int32 InWidth, int32 InHeight)
+{
+	check(IsInGameThread());
+
 	if (!Texture || Texture->GetSizeX() != InWidth || Texture->GetSizeY() != InHeight)
 	{
 		DestroyTexture();
@@ -1460,6 +1593,22 @@ UTexture2D* USwuiView::GetOrCreateTexture(int32 InWidth, int32 InHeight)
 		Texture = UTexture2D::CreateTransient(InWidth, InHeight, PF_B8G8R8A8);
 		Texture->AddToRoot();
 		Texture->UpdateResource();
+
+		if (ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated)
+		{
+			BackTexture = UTexture2D::CreateTransient(InWidth, InHeight, PF_B8G8R8A8);
+			BackTexture->AddToRoot();
+			BackTexture->UpdateResource();
+
+			BlitTargetResource.store(static_cast<FTextureResource*>(BackTexture->GetResource()), std::memory_order_release);
+		}
+		else
+		{
+			BlitTargetResource.store(static_cast<FTextureResource*>(Texture->GetResource()), std::memory_order_release);
+		}
+
+		BlitGeneration.store(0, std::memory_order_release);
+		LastConsumedBlitGeneration = 0;
 
 		{
 			FScopeLock Lock(&PaintMutex);
@@ -1472,9 +1621,31 @@ UTexture2D* USwuiView::GetOrCreateTexture(int32 InWidth, int32 InHeight)
 
 		ResetMatInstance();
 	}
-
-	return Texture;
 }
+
+void USwuiView::ApplyPendingTextureResize()
+{
+	check(IsInGameThread());
+
+	int32 ReqWidth = 0;
+	int32 ReqHeight = 0;
+	{
+		FScopeLock Lock(&PaintMutex);
+		ReqWidth = PendingRequestedWidth;
+		ReqHeight = PendingRequestedHeight;
+	}
+
+	if (ReqWidth <= 0 || ReqHeight <= 0)
+	{
+		return;
+	}
+
+	if (!Texture || Texture->GetSizeX() != ReqWidth || Texture->GetSizeY() != ReqHeight)
+	{
+		ApplyTextureResizeImmediate(ReqWidth, ReqHeight);
+	}
+}
+
 
 void USwuiView::ResetTexture()
 {
@@ -1483,6 +1654,22 @@ void USwuiView::ResetTexture()
 	Texture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
 	Texture->AddToRoot();
 	Texture->UpdateResource();
+
+	if (ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated)
+	{
+		BackTexture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
+		BackTexture->AddToRoot();
+		BackTexture->UpdateResource();
+
+		BlitTargetResource.store(static_cast<FTextureResource*>(BackTexture->GetResource()), std::memory_order_release);
+	}
+	else
+	{
+		BlitTargetResource.store(static_cast<FTextureResource*>(Texture->GetResource()), std::memory_order_release);
+	}
+
+	BlitGeneration.store(0, std::memory_order_release);
+	LastConsumedBlitGeneration = 0;
 
 	{
 		FScopeLock Lock(&PaintMutex);
@@ -1499,13 +1686,23 @@ void USwuiView::ResetTexture()
 
 void USwuiView::DestroyTexture()
 {
+	BlitTargetResource.store(nullptr, std::memory_order_release);
+
 	if (Texture)
 	{
 		Texture->RemoveFromRoot();
 		Texture->MarkAsGarbage();
 		Texture = nullptr;
 	}
+
+	if (BackTexture)
+	{
+		BackTexture->RemoveFromRoot();
+		BackTexture->MarkAsGarbage();
+		BackTexture = nullptr;
+	}
 }
+
 
 void USwuiView::ResetMatInstance()
 {

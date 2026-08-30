@@ -831,16 +831,19 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 			? FString::Printf(TEXT("{%s}"), *FString::Join(ChangedEntries, TEXT(",")))
 			: TEXT("{}");
 
+		const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		const uint64 FrameCounter = GFrameCounter;
+
 		BatchedScript = FString::Printf(
 			TEXT("(function(){")
 			TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-			TEXT("s._runtime={fps:%.1f,dt:%.4f,cefFps:%d,width:%d,height:%d};")
+			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,cefFps:%d,width:%d,height:%d};")
 			TEXT("if(s._batch){s._batch(%s,s._runtime);}else{")
 			TEXT("var u=%s;for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);}")
 			TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
 			TEXT("}")
 			TEXT("})()"),
-			AvgFPS, LastDeltaTime, CefFPS, View->Width, View->Height,
+			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, CefFPS, View->Width, View->Height,
 			*StateJson, *StateJson);
 
 		bFlushed = true;
@@ -848,15 +851,19 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 	else
 	{
 		// Legacy multi-statement fallback
+		const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		const uint64 FrameCounter = GFrameCounter;
+
 		const FString RuntimeScript = FString::Printf(
 			TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-			TEXT("s._runtime={fps:%.1f,dt:%.4f,cefFps:%d,width:%d,height:%d};")
+			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,cefFps:%d,width:%d,height:%d};")
 			TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
 			TEXT("})()"),
-			AvgFPS, LastDeltaTime,
+			AvgFPS, LastDeltaTime, WorldTime, FrameCounter,
 			CefFPS, View->Width, View->Height);
 		BatchedScript += RuntimeScript;
 		bFlushed = true;
+
 
 		if (ObservedProperties.Num() > 0)
 		{

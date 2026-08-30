@@ -66,9 +66,11 @@ public:
 
 	void SetOwningActor(AActor* InOwningActor) { OwningActor = InOwningActor; }
 	bool HandleIncomingMessage(const FString& MessageJson);
+	bool HandleIncomingQuery(const FString& QueryJson, FString& OutResponseJson);
 
 	UFUNCTION(BlueprintCallable, Category="SwuiRuntime")
 	UTexture2D* GetTexture() const;
+
 
 	// ISwuiRenderTarget
 	virtual void OnPaint(
@@ -201,6 +203,16 @@ private:
 	void DestroyTexture();
 	void ResetMatInstance();
 
+	// GetOrCreateTexture() can be invoked from the CEF renderer thread (via
+	// OnPaint / OnAcceleratedPaint). UTexture2D::CreateTransient, AddToRoot,
+	// UpdateResource, and MarkAsGarbage are UObject/GC operations that are
+	// only safe to call on the game thread. These two helpers split the old
+	// single-threaded GetOrCreateTexture() into a game-thread-only mutator
+	// (ApplyTextureResizeImmediate) and a game-thread poller
+	// (ApplyPendingTextureResize) that TickDeferredUpload calls every frame.
+	void ApplyTextureResizeImmediate(int32 InWidth, int32 InHeight);
+	void ApplyPendingTextureResize();
+
 	// ---- Browser frame pacing helpers ----
 
 	void DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTick);
@@ -215,10 +227,26 @@ private:
 	TSharedPtr<FSwuiViewCefData> CefData;
 
 	UPROPERTY()
-	UTexture2D* Texture = nullptr;
+	UTexture2D* Texture = nullptr;       // "front" — currently bound to MaterialInstance
+
+	UPROPERTY()
+	UTexture2D* BackTexture = nullptr;   // "back" — blit target for the next GPU frame
+
+	// Raw resource pointer the CEF thread reads to pick its blit target.
+	// Never a UObject — safe to touch off the game thread. Written only by
+	// the game thread (ApplyTextureResizeImmediate / the tick-side flip);
+	// read only by OnAcceleratedPaint on the CEF thread.
+	std::atomic<FTextureResource*> BlitTargetResource{ nullptr };
+
+	// Bumped by OnAcceleratedPaint after enqueuing a blit into BlitTargetResource.
+	// Polled once per game-thread tick; TickDeferredUpload swaps front/back
+	// when it sees this has advanced since the last check.
+	std::atomic<uint64> BlitGeneration{ 0 };
+	uint64 LastConsumedBlitGeneration = 0;
 
 	UPROPERTY()
 	UMaterialInstanceDynamic* MaterialInstance = nullptr;
+
 
 	ESwuiRenderingMode ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
 
@@ -261,6 +289,13 @@ private:
 
 	double LastPaintArrivalTime = 0.0;
 	double PendingFreshPaintArrivalTime = 0.0;
+
+	// Most recent size CEF reported via OnPaint/OnAcceleratedPaint, possibly
+	// from the CEF renderer thread. Guarded by PaintMutex. Consumed on the
+	// game thread by ApplyPendingTextureResize().
+	int32 PendingRequestedWidth = 0;
+	int32 PendingRequestedHeight = 0;
+
 
 	// ---- HUD ROI state ----
 

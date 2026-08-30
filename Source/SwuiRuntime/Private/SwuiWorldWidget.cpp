@@ -185,17 +185,19 @@ void USwuiWorldWidget::ForwardHitUVToBrowser(
 		return;
 	}
 
+	const FKey EffectiveButton = MouseButton.IsValid() ? MouseButton : EKeys::LeftMouseButton;
+
 	if (bIsMove)
 	{
 		View->ForwardMouseMoveAtPixel(BX, BY);
 	}
 	if (bIsDown)
 	{
-		View->ForwardMouseButtonAtPixel(BX, BY, MouseButton, /*bMouseUp=*/false);
+		View->ForwardMouseButtonAtPixel(BX, BY, EffectiveButton, /*bMouseUp=*/false);
 	}
 	if (bIsUp)
 	{
-		View->ForwardMouseButtonAtPixel(BX, BY, MouseButton, /*bMouseUp=*/true);
+		View->ForwardMouseButtonAtPixel(BX, BY, EffectiveButton, /*bMouseUp=*/true);
 	}
 }
 

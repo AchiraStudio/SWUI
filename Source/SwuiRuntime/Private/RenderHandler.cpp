@@ -75,17 +75,36 @@ public:
 		const FString RequestJson = FString(Request.ToWString().c_str());
 
 		UE_LOG(LogSwuiRuntime, Log, TEXT("[SWUI JS BUS] cefQuery received raw=%s"), *RequestJson);
-		Callback->Success("ok");
 
 		TWeakObjectPtr<USwuiView> WeakView = OwningView;
-		AsyncTask(ENamedThreads::GameThread, [WeakView, RequestJson]()
+		AsyncTask(ENamedThreads::GameThread, [WeakView, RequestJson, Callback]()
 		{
-			if (WeakView.IsValid())
+			if (!WeakView.IsValid())
+			{
+				Callback->Failure(-1, "View is invalid");
+				return;
+			}
+
+			if (RequestJson.Contains(TEXT("\"type\":\"query\"")) || RequestJson.Contains(TEXT("\"type\": \"query\"")))
+			{
+				FString ResponseJson;
+				if (WeakView->HandleIncomingQuery(RequestJson, ResponseJson))
+				{
+					Callback->Success(TCHAR_TO_UTF8(*ResponseJson));
+				}
+				else
+				{
+					Callback->Failure(1, TCHAR_TO_UTF8(*ResponseJson));
+				}
+			}
+			else
 			{
 				WeakView->HandleIncomingMessage(RequestJson);
+				Callback->Success("ok");
 			}
 		});
 		return true;
+
 	}
 
 private:

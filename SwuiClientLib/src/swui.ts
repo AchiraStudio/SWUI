@@ -114,10 +114,13 @@ interface SwuiCefQueryRequest {
 export interface SwuiRuntimeData {
   fps: number;
   dt: number;
+  time?: number;
+  frameIndex?: number;
   cefFps: number;
   width: number;
   height: number;
 }
+
 
 
 interface SwuiRuntime {
@@ -541,11 +544,74 @@ function updateState(batch: Record<string, unknown>): void {
   _notifyBatch(batch);
 }
 
+/**
+ * Query Unreal Engine for read-only game state (e.g. IsTetherAttached, GetPlayerPing).
+ * Returns a Promise that resolves with the parsed response.
+ */
+function query<T = unknown>(name: string, payload?: unknown): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const win = _getWindow();
+    if (win.cefQuery) {
+      win.cefQuery({
+        request: JSON.stringify({ type: 'query', name, payload }),
+        onSuccess: (response: string) => {
+          try {
+            resolve(JSON.parse(response));
+          } catch {
+            resolve(response as unknown as T);
+          }
+        },
+        onFailure: (errorCode: number, errorMessage: string) => {
+          reject(new Error(`[SWUI Query Error ${errorCode}] ${errorMessage}`));
+        }
+      });
+    } else {
+      reject(new Error('[SWUI] cefQuery bridge is not available in this environment'));
+    }
+  });
+}
+
+/** Linear interpolation helper */
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** Frame-rate independent exponential damping helper */
+function damp(current: number, target: number, smoothing: number, dt: number): number {
+  return lerp(current, target, 1 - Math.exp(-smoothing * dt));
+}
+
+/** Simple 1D spring physics simulation helper */
+function createSpring(config: { stiffness?: number; damping?: number; mass?: number; initialValue?: number } = {}) {
+  const stiffness = config.stiffness ?? 180;
+  const damping = config.damping ?? 12;
+  const mass = config.mass ?? 1;
+  let value = config.initialValue ?? 0;
+  let velocity = 0;
+  let target = value;
+
+  return {
+    get value() { return value; },
+    get target() { return target; },
+    set target(v: number) { target = v; },
+    set(v: number) { value = v; velocity = 0; },
+    step(dt: number) {
+      const force = -stiffness * (value - target) - damping * velocity;
+      const accel = force / mass;
+      velocity += accel * dt;
+      value += velocity * dt;
+      return value;
+    }
+  };
+}
+
 // ── Export ──────────────────────────────────────────────────────────────────
 
 const Swui = {
   // State & Sync
-  on, onBatch, onTick, get, getAll, updateState,
+  on, onBatch, onTick, get, getAll, updateState, query,
+  // Animation math helpers
+  lerp, damp, createSpring,
   // Navigation — subscribe
   onEvent, onNavigate, onConfirm, onCancel, onNextTab, onPreviousTab,
   postMessage,
@@ -556,5 +622,6 @@ const Swui = {
   onKeyDown, onKeyUp, onTextInput,
 };
 export default Swui;
-export { postMessage, emitNavigationEvent, onBatch, onTick, updateState };
+export { postMessage, emitNavigationEvent, onBatch, onTick, updateState, query, lerp, damp, createSpring };
+
 
