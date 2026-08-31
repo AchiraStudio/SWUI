@@ -636,8 +636,6 @@ void USwuiSubsystem::ObserveDelegate(UObject* Source, const FString& Namespace, 
 		}
 	}
 
-	const FString NsKey = ResolveNamespace(Source, Namespace) + TEXT(".") + DelegateName.ToString();
-
 	FSwuiObservedDelegate Entry;
 	Entry.Source        = Source;
 	Entry.DelegateName  = DelegateName;
