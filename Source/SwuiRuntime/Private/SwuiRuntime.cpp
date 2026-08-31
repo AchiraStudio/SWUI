@@ -2,9 +2,12 @@
 #include "Interfaces/IPluginManager.h"
 #include "SwuiManager.h"
 #include "SwuiSettings.h"
+#include "SwuiView.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/Paths.h"
+#include "UObject/UObjectIterator.h"
 
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
@@ -111,15 +114,20 @@ class FSwuiRuntime : public ISwuiRuntime
 
 		const uint32 ProcessId = FPlatformProcess::GetCurrentProcessId();
 
+		// Stable cache path that persists across launches so Chromium can reuse
+		// its JS/CSS parse cache and GPU shader cache. CEF uses its own internal
+		// locking, making a fixed path safe for the normal single-instance case.
+		// Previously this was PID-suffixed (SWUI_BundledCEF_<pid> in temp),
+		// which caused a cold-start on every single launch and leaked a new
+		// orphaned folder in the OS temp dir each run.
 		const FString RootCachePath = FPaths::ConvertRelativePathToFull(
-			FPaths::Combine(
-				FPlatformProcess::UserTempDir(),
-				FString::Printf(TEXT("SWUI_BundledCEF_%u"), ProcessId)
-			)
+			FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SwuiCef"), TEXT("Cache"))
 		);
 
 		const FString CachePath = FPaths::Combine(RootCachePath, TEXT("Default"));
 
+		// Log file keeps the PID suffix so concurrent editor/game instances
+		// don't overwrite each other's CEF debug log.
 		const FString CefLogPath = FPaths::ConvertRelativePathToFull(
 			FPaths::Combine(
 				FPaths::ProjectLogDir(),
@@ -163,7 +171,53 @@ class FSwuiRuntime : public ISwuiRuntime
 	virtual void ShutdownModule() override
 	{
 		UE_LOG(LogSwuiRuntime, Log, TEXT(" STATUS: Shutdown"));
-		// CefShutdown();
+
+		// Close every live browser before calling CefShutdown().
+		// Calling CefShutdown() while any CefBrowser is still alive causes a
+		// crash or hang — that's why it was commented out before. The correct
+		// sequence is: close all browsers → pump message loop until each
+		// OnBeforeClose has fired → then call CefShutdown().
+		int32 BrowsersClosed = 0;
+		for (TObjectIterator<USwuiView> It; It; ++It)
+		{
+			if (It->HasBrowserHost())
+			{
+				It->ForceCloseBrowserForShutdown();
+				++BrowsersClosed;
+			}
+		}
+
+		if (BrowsersClosed > 0)
+		{
+			// Pump the CEF message loop until all browser hosts are gone,
+			// or until a 500 ms safety timeout elapses.
+			const double TimeoutSec = 0.500;
+			const double StartTime  = FPlatformTime::Seconds();
+
+			bool bAllClosed = false;
+			while (!bAllClosed && (FPlatformTime::Seconds() - StartTime) < TimeoutSec)
+			{
+				CefDoMessageLoopWork();
+
+				bAllClosed = true;
+				for (TObjectIterator<USwuiView> It; It; ++It)
+				{
+					if (It->HasBrowserHost())
+					{
+						bAllClosed = false;
+						break;
+					}
+				}
+			}
+
+			UE_LOG(LogSwuiRuntime, Log,
+				TEXT("[SWUI Shutdown] Closed %d browser(s) in %.1f ms. AllClosed=%s"),
+				BrowsersClosed,
+				(FPlatformTime::Seconds() - StartTime) * 1000.0,
+				bAllClosed ? TEXT("true") : TEXT("false (timeout)"));
+		}
+
+		CefShutdown();
 	}
 };
 

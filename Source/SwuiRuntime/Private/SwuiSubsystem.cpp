@@ -789,6 +789,11 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		AvgFPS = AvgFPS * 0.9f + (1.f / DeltaTime) * 0.1f;
 	LastDeltaTime = DeltaTime;
 
+	const double Now = FPlatformTime::Seconds();
+	const int32 TargetHz = FMath::Clamp(CefFPS > 0 ? CefFPS : View->GetWindowlessFrameRate(), 1, 300);
+	const double MinInterval = 1.0 / static_cast<double>(TargetHz);
+	const bool bHasQueuedEvents = (QueuedHudEventScripts.Num() > 0);
+
 	const bool bUseBatchStateSync = CVarSwuiBatchStateSync.GetValueOnGameThread() != 0;
 	bool bFlushed = false;
 	FString BatchedScript;
@@ -797,10 +802,6 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 	{
 		// Fast atomic JSON state batch
 		TArray<FString> ChangedEntries;
-		FString LatestCurrentAmmoJs;
-		FString LatestReserveAmmoJs;
-		bool bCurrentAmmoChanged = false;
-		bool bReserveAmmoChanged = false;
 
 		for (int32 i = ObservedProperties.Num() - 1; i >= 0; --i)
 		{
@@ -823,18 +824,28 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 			{
 				LastObservedValues.Add(Entry.NamespacedKey, JSValue);
 				ChangedEntries.Add(FString::Printf(TEXT("\"%s\":%s"), *Entry.NamespacedKey, *JSValue));
-
-				if (Entry.NamespacedKey.Contains(TEXT("currentammo"), ESearchCase::IgnoreCase))
-				{
-					LatestCurrentAmmoJs = JSValue;
-					bCurrentAmmoChanged = true;
-				}
-				if (Entry.NamespacedKey.Contains(TEXT("reserveammo"), ESearchCase::IgnoreCase))
-				{
-					LatestReserveAmmoJs = JSValue;
-					bReserveAmmoChanged = true;
-				}
 			}
+		}
+
+		const bool bHasChangedProperties = (ChangedEntries.Num() > 0);
+		const bool bHeartbeatDue = (Now - LastHeartbeatTime) >= 1.0;
+
+		// If nothing changed, no events queued, and no heartbeat due, skip sending JS completely
+		if (!bHasChangedProperties && !bHasQueuedEvents && !bHeartbeatDue)
+		{
+			return false;
+		}
+
+		// Rate-limit state flushes to the browser's target refresh rate unless urgent events are queued
+		if (!bHasQueuedEvents && LastJsStateFlushTime > 0.0 && (Now - LastJsStateFlushTime) < (MinInterval - 0.0015))
+		{
+			return false;
+		}
+
+		LastJsStateFlushTime = Now;
+		if (bHeartbeatDue)
+		{
+			LastHeartbeatTime = Now;
 		}
 
 		FString StateJson = ChangedEntries.Num() > 0
@@ -860,7 +871,53 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 	}
 	else
 	{
-		// Legacy multi-statement fallback
+		// Legacy multi-statement fallback with change detection
+		TArray<FString> PropertyAssignments;
+		for (int32 i = ObservedProperties.Num() - 1; i >= 0; --i)
+		{
+			FSwuiObservedProperty& Entry = ObservedProperties[i];
+			if (!Entry.Source.IsValid())
+			{
+				ObservedProperties.RemoveAtSwap(i);
+				continue;
+			}
+
+			UObject* Obj = Entry.Source.Get();
+			if (!Entry.CachedProp) continue;
+
+			const FString JSValue = Swui_SerializeProperty(Entry.CachedProp, Obj);
+			if (JSValue.IsEmpty()) continue;
+			const FString* PrevValue = LastObservedValues.Find(Entry.NamespacedKey);
+			const bool bChanged = !PrevValue || *PrevValue != JSValue;
+			if (bChanged)
+			{
+				LastObservedValues.Add(Entry.NamespacedKey, JSValue);
+				PropertyAssignments.Add(FString::Printf(
+					TEXT("s.state['%s']=%s;if(s._notify)s._notify('%s',%s);"),
+					*Entry.NamespacedKey, *JSValue,
+					*Entry.NamespacedKey, *JSValue));
+			}
+		}
+
+		const bool bHasChangedProperties = (PropertyAssignments.Num() > 0);
+		const bool bHeartbeatDue = (Now - LastHeartbeatTime) >= 1.0;
+
+		if (!bHasChangedProperties && !bHasQueuedEvents && !bHeartbeatDue)
+		{
+			return false;
+		}
+
+		if (!bHasQueuedEvents && LastJsStateFlushTime > 0.0 && (Now - LastJsStateFlushTime) < (MinInterval - 0.0015))
+		{
+			return false;
+		}
+
+		LastJsStateFlushTime = Now;
+		if (bHeartbeatDue)
+		{
+			LastHeartbeatTime = Now;
+		}
+
 		const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 		const uint64 FrameCounter = GFrameCounter;
 
@@ -874,47 +931,17 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		BatchedScript += RuntimeScript;
 		bFlushed = true;
 
-
-		if (ObservedProperties.Num() > 0)
+		if (PropertyAssignments.Num() > 0)
 		{
 			FString Script = TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});");
-			bool bAny = false;
-
-			for (int32 i = ObservedProperties.Num() - 1; i >= 0; --i)
+			for (const FString& Assign : PropertyAssignments)
 			{
-				FSwuiObservedProperty& Entry = ObservedProperties[i];
-				if (!Entry.Source.IsValid())
-				{
-					ObservedProperties.RemoveAtSwap(i);
-					continue;
-				}
-
-				UObject* Obj = Entry.Source.Get();
-				if (!Entry.CachedProp) continue;
-
-				const FString JSValue = Swui_SerializeProperty(Entry.CachedProp, Obj);
-				if (JSValue.IsEmpty()) continue;
-				const FString* PrevValue = LastObservedValues.Find(Entry.NamespacedKey);
-				const bool bChanged = !PrevValue || *PrevValue != JSValue;
-				if (bChanged)
-				{
-					LastObservedValues.Add(Entry.NamespacedKey, JSValue);
-				}
-
-				Script += FString::Printf(
-					TEXT("s.state['%s']=%s;if(s._notify)s._notify('%s',%s);"),
-					*Entry.NamespacedKey, *JSValue,
-					*Entry.NamespacedKey, *JSValue);
-				bAny = true;
+				Script += Assign;
 			}
-
 			Script += TEXT("})();");
-			if (bAny)
-			{
-				if (!BatchedScript.IsEmpty()) BatchedScript += TEXT(";");
-				BatchedScript += Script;
-				bFlushed = true;
-			}
+
+			if (!BatchedScript.IsEmpty()) BatchedScript += TEXT(";");
+			BatchedScript += Script;
 		}
 	}
 
@@ -935,13 +962,13 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		}
 	}
 
-	if (!bFlushed)
+	if (!bFlushed || BatchedScript.IsEmpty())
 	{
 		return false;
 	}
 
-	View->ExecuteJavaScript(BatchedScript);
-	return bFlushed;
+	View->QueuePendingScript(BatchedScript);
+	return true;
 }
 
 

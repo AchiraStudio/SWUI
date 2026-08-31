@@ -224,6 +224,9 @@ private:
 	TArray<FString> QueuedHudEventScripts;
 	TMap<FString, FString> LastObservedValues;
 
+	double LastJsStateFlushTime = 0.0;
+	double LastHeartbeatTime = 0.0;
+
 	// Per-delegate bridge objects created by ObserveDelegate.
 	UPROPERTY()
 	TArray<USwuiDelegateBridge*> DelegateBridges;

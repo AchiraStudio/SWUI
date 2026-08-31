@@ -236,6 +236,11 @@ void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> Browser)
 	{
 		BrowserRef = nullptr;
 	}
+
+	if (OwningView)
+	{
+		OwningView->OnBrowserClosed(Browser);
+	}
 }
 
 bool BrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser> Browser,

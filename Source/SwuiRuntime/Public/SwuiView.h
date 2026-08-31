@@ -140,6 +140,18 @@ public:
 	bool IsPointerInputEnabled() const { return bPointerInputEnabled; }
 	bool HasBrowserHost() const;
 
+	/**
+	 * Called by ShutdownModule to initiate orderly browser close.
+	 * After this call HasBrowserHost() will return false once CEF has
+	 * fully torn down the browser (after OnBeforeClose fires).
+	 * Do NOT call this during normal gameplay — use BeginDestroy() instead.
+	 */
+	void ForceCloseBrowserForShutdown();
+	void OnBrowserClosed(CefRefPtr<CefBrowser> InBrowser);
+
+	/** Queues a JavaScript snippet to be executed in synchronization with the next browser frame. */
+	void QueuePendingScript(const FString& InScript);
+
 	bool ScreenToBrowserPixel(const FVector2D& ScreenPos, int32& OutX, int32& OutY) const;
 
 	// Convert a normalised UV coordinate [0,1]x[0,1] to a browser pixel coordinate.
@@ -325,7 +337,7 @@ private:
 	// ---- HUD ROI stats ----
 
 	int32  Stat_RoiUploadRects = 0;
-	int32  Stat_RoiUploadedPx = 0;
+	int64  Stat_RoiUploadedPx = 0;
 	int32  Stat_RoiUploads = 0;
 	double Stat_RoiEnqueueMsSum = 0.0;
 	double Stat_RoiEnqueueMsMax = 0.0;
@@ -335,4 +347,6 @@ private:
 
 	double Stat_LastLogTime = 0.0;
 	int32 TargetFpsForLog = 0;
+
+	FString PendingScript;
 };

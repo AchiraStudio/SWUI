@@ -423,6 +423,43 @@ void USwuiView::ExecuteJavaScript(const FString& Script)
 	}
 }
 
+void USwuiView::QueuePendingScript(const FString& InScript)
+{
+	if (InScript.IsEmpty())
+	{
+		return;
+	}
+
+	if (!PendingScript.IsEmpty())
+	{
+		PendingScript += TEXT(";");
+	}
+	PendingScript += InScript;
+}
+
+void USwuiView::ForceCloseBrowserForShutdown()
+{
+	if (CefData && CefData->Browser)
+	{
+		CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
+		if (Host)
+		{
+			Host->CloseBrowser(true);
+		}
+	}
+}
+
+void USwuiView::OnBrowserClosed(CefRefPtr<CefBrowser> InBrowser)
+{
+	if (CefData && CefData->Browser)
+	{
+		if (!InBrowser || CefData->Browser->IsSame(InBrowser))
+		{
+			CefData->Browser = nullptr;
+		}
+	}
+}
+
 AActor* USwuiView::ResolveOwningActor() const
 {
 	if (OwningActor.IsValid())
@@ -689,7 +726,14 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 	{
 		if (bHasScript)
 		{
-			ExecuteJavaScript(CombinedScript);
+			const std::string StdScript = std::string(TCHAR_TO_UTF8(*CombinedScript));
+			CefPostTask(
+				TID_UI,
+				new FSwuiFlushAndBeginFrameTask(
+					CefData->Browser,
+					StdScript,
+					/*bInvalidateView=*/true,
+					/*bSendBeginFrame=*/false));
 		}
 
 		return false;
@@ -701,7 +745,14 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 
 		if (bHasScript)
 		{
-			ExecuteJavaScript(CombinedScript);
+			const std::string StdScript = std::string(TCHAR_TO_UTF8(*CombinedScript));
+			CefPostTask(
+				TID_UI,
+				new FSwuiFlushAndBeginFrameTask(
+					CefData->Browser,
+					StdScript,
+					/*bInvalidateView=*/true,
+					/*bSendBeginFrame=*/false));
 		}
 
 		return false;
@@ -817,7 +868,8 @@ bool USwuiView::SendExternalBeginFrameIfDue(float DeltaTime)
 		return false;
 	}
 
-	return FlushHudStateAndRequestBrowserFrame(FString(), DeltaTime, false);
+	FString ScriptToSend = MoveTemp(PendingScript);
+	return FlushHudStateAndRequestBrowserFrame(ScriptToSend, DeltaTime, false);
 }
 
 UTexture2D* USwuiView::GetTexture() const
@@ -1142,9 +1194,11 @@ void USwuiView::DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTic
 		? FMath::Max(0.0, Now - LastBrowserFrameTime)
 		: 1.0 / 60.0;
 
+	FString ScriptToSend = MoveTemp(PendingScript);
+
 	if (bDebugForceEveryTick)
 	{
-		FlushHudStateAndRequestBrowserFrame(FString(), static_cast<float>(DeltaSeconds), true);
+		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), true);
 		LastBrowserFrameTime = Now;
 		TargetFpsForLog = WindowlessFrameRate;
 		return;
@@ -1167,8 +1221,20 @@ void USwuiView::DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTic
 
 	if (LastBrowserFrameTime <= 0.0 || (Now - LastBrowserFrameTime) >= (MinInterval - Tolerance))
 	{
-		FlushHudStateAndRequestBrowserFrame(FString(), static_cast<float>(DeltaSeconds), false);
+		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), false);
 		LastBrowserFrameTime = Now;
+	}
+	else if (!ScriptToSend.IsEmpty())
+	{
+		// Preserve queued script if the frame interval is not yet due
+		if (PendingScript.IsEmpty())
+		{
+			PendingScript = MoveTemp(ScriptToSend);
+		}
+		else
+		{
+			PendingScript = ScriptToSend + TEXT(";") + PendingScript;
+		}
 	}
 }
 
