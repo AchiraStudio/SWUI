@@ -562,11 +562,24 @@ void USwuiSubsystem::ObserveProperty(UObject* Source, const FString& Namespace, 
 		return;
 	}
 
+	const FString NsKey = ResolveNamespace(Source, Namespace) + TEXT(".") + PropertyName.ToString();
+
+	// Deduplicate: do not add if the exact source and property are already observed
+	const bool bAlreadyObserved = ObservedProperties.ContainsByPredicate(
+		[Source, &PropertyName, &NsKey](const FSwuiObservedProperty& E)
+		{
+			return E.Source.Get() == Source && (E.PropertyName == PropertyName || E.NamespacedKey == NsKey);
+		});
+	if (bAlreadyObserved)
+	{
+		return;
+	}
+
 	FSwuiObservedProperty Entry;
 	Entry.Source        = Source;
 	Entry.PropertyName  = PropertyName;
 	Entry.CachedProp    = Prop;
-	Entry.NamespacedKey = ResolveNamespace(Source, Namespace) + TEXT(".") + PropertyName.ToString();
+	Entry.NamespacedKey = NsKey;
 
 	ObservedProperties.Add(Entry);
 }
@@ -574,6 +587,19 @@ void USwuiSubsystem::ObserveProperty(UObject* Source, const FString& Namespace, 
 void USwuiSubsystem::ObserveDelegate(UObject* Source, const FString& Namespace, const FName& DelegateName)
 {
 	if (!Source) return;
+
+	const FString NsKey = ResolveNamespace(Source, Namespace) + TEXT(".") + DelegateName.ToString();
+
+	// Deduplicate: do not add if the exact source and delegate are already observed
+	const bool bAlreadyObserved = ObservedDelegates.ContainsByPredicate(
+		[Source, &DelegateName, &NsKey](const FSwuiObservedDelegate& E)
+		{
+			return E.Source.Get() == Source && (E.DelegateName == DelegateName || E.NamespacedKey == NsKey);
+		});
+	if (bAlreadyObserved)
+	{
+		return;
+	}
 
 	FObjectProperty* DelegateProp = nullptr;
 	FMulticastDelegateProperty* MCProp = nullptr;
@@ -789,18 +815,15 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		AvgFPS = AvgFPS * 0.9f + (1.f / DeltaTime) * 0.1f;
 	LastDeltaTime = DeltaTime;
 
-	const double Now = FPlatformTime::Seconds();
-	const int32 TargetHz = FMath::Clamp(CefFPS > 0 ? CefFPS : View->GetWindowlessFrameRate(), 1, 300);
-	const double MinInterval = 1.0 / static_cast<double>(TargetHz);
-	const bool bHasQueuedEvents = (QueuedHudEventScripts.Num() > 0);
+	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const uint64 FrameCounter = GFrameCounter;
 
 	const bool bUseBatchStateSync = CVarSwuiBatchStateSync.GetValueOnGameThread() != 0;
-	bool bFlushed = false;
 	FString BatchedScript;
 
 	if (bUseBatchStateSync)
 	{
-		// Fast atomic JSON state batch
+		// Fast atomic JSON state batch — only serialize changed properties
 		TArray<FString> ChangedEntries;
 
 		for (int32 i = ObservedProperties.Num() - 1; i >= 0; --i)
@@ -827,51 +850,29 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 			}
 		}
 
-		const bool bHasChangedProperties = (ChangedEntries.Num() > 0);
-		const bool bHeartbeatDue = (Now - LastHeartbeatTime) >= 1.0;
-
-		// If nothing changed, no events queued, and no heartbeat due, skip sending JS completely
-		if (!bHasChangedProperties && !bHasQueuedEvents && !bHeartbeatDue)
-		{
-			return false;
-		}
-
-		// Rate-limit state flushes to the browser's target refresh rate unless urgent events are queued
-		if (!bHasQueuedEvents && LastJsStateFlushTime > 0.0 && (Now - LastJsStateFlushTime) < (MinInterval - 0.0015))
-		{
-			return false;
-		}
-
-		LastJsStateFlushTime = Now;
-		if (bHeartbeatDue)
-		{
-			LastHeartbeatTime = Now;
-		}
-
 		FString StateJson = ChangedEntries.Num() > 0
 			? FString::Printf(TEXT("{%s}"), *FString::Join(ChangedEntries, TEXT(",")))
-			: TEXT("{}");
-
-		const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-		const uint64 FrameCounter = GFrameCounter;
+			: TEXT("null");
 
 		BatchedScript = FString::Printf(
 			TEXT("(function(){")
 			TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
 			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,cefFps:%d,width:%d,height:%d};")
-			TEXT("if(s._batch){s._batch(%s,s._runtime);}else{")
-			TEXT("var u=%s;for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);}")
+			TEXT("var u=%s;")
+			TEXT("if(u){if(s._batch){s._batch(u,s._runtime);}else{for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);}}}")
 			TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
-			TEXT("}")
 			TEXT("})()"),
 			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, CefFPS, View->Width, View->Height,
-			*StateJson, *StateJson);
-
-		bFlushed = true;
+			*StateJson);
 	}
 	else
 	{
-		// Legacy multi-statement fallback with change detection
+		// Legacy fallback
+		BatchedScript = FString::Printf(
+			TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
+			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,cefFps:%d,width:%d,height:%d};"),
+			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, CefFPS, View->Width, View->Height);
+
 		TArray<FString> PropertyAssignments;
 		for (int32 i = ObservedProperties.Num() - 1; i >= 0; --i)
 		{
@@ -899,50 +900,12 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 			}
 		}
 
-		const bool bHasChangedProperties = (PropertyAssignments.Num() > 0);
-		const bool bHeartbeatDue = (Now - LastHeartbeatTime) >= 1.0;
-
-		if (!bHasChangedProperties && !bHasQueuedEvents && !bHeartbeatDue)
+		for (const FString& Assign : PropertyAssignments)
 		{
-			return false;
+			BatchedScript += Assign;
 		}
 
-		if (!bHasQueuedEvents && LastJsStateFlushTime > 0.0 && (Now - LastJsStateFlushTime) < (MinInterval - 0.0015))
-		{
-			return false;
-		}
-
-		LastJsStateFlushTime = Now;
-		if (bHeartbeatDue)
-		{
-			LastHeartbeatTime = Now;
-		}
-
-		const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-		const uint64 FrameCounter = GFrameCounter;
-
-		const FString RuntimeScript = FString::Printf(
-			TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,cefFps:%d,width:%d,height:%d};")
-			TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
-			TEXT("})()"),
-			AvgFPS, LastDeltaTime, WorldTime, FrameCounter,
-			CefFPS, View->Width, View->Height);
-		BatchedScript += RuntimeScript;
-		bFlushed = true;
-
-		if (PropertyAssignments.Num() > 0)
-		{
-			FString Script = TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});");
-			for (const FString& Assign : PropertyAssignments)
-			{
-				Script += Assign;
-			}
-			Script += TEXT("})();");
-
-			if (!BatchedScript.IsEmpty()) BatchedScript += TEXT(";");
-			BatchedScript += Script;
-		}
+		BatchedScript += TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));})();");
 	}
 
 	if (QueuedHudEventScripts.Num() > 0)
@@ -958,13 +921,7 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		{
 			if (!BatchedScript.IsEmpty()) BatchedScript += TEXT(";");
 			BatchedScript += BatchedEvents;
-			bFlushed = true;
 		}
-	}
-
-	if (!bFlushed || BatchedScript.IsEmpty())
-	{
-		return false;
 	}
 
 	View->QueuePendingScript(BatchedScript);
