@@ -131,6 +131,18 @@ TAutoConsoleVariable<int32> CVarSwuiDebugForceFullFrameUploadEveryFrame(
 	TEXT("Also forces browser frame pumping. 0=off, 1=on."),
 	ECVF_Default);
 
+TAutoConsoleVariable<int32> CVarSwuiDebugStats(
+	TEXT("swui.debug.Stats"),
+	0,
+	TEXT("Log throttled SWUI runtime performance and presentation stats every second. 0 = off, 1 = on."),
+	ECVF_Default);
+
+TAutoConsoleVariable<int32> CVarSwuiDebugTimelineStats(
+	TEXT("swui.debug.TimelineStats"),
+	0,
+	TEXT("Log timeline synchronization and presentation latency error diagnostics. 0 = off, 1 = on."),
+	ECVF_Default);
+
 // UI resolution presets
 TAutoConsoleVariable<int32> CVarSwuiUiResolutionPreset(
 	TEXT("swui.hud.UiResolutionPreset"),

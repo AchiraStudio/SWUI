@@ -333,3 +333,139 @@ public:
 	virtual ~ISwuiAcceleratedRenderTarget() = default;
 	virtual void OnAcceleratedPaint(void* SharedHandle, int32 Width, int32 Height) = 0;
 };
+
+// ---------------------------------------------------------------------------
+// Timeline Synchronization (SWUI 1.5 Phase 2)
+// ---------------------------------------------------------------------------
+
+UENUM(BlueprintType)
+enum class ESwuiTimelineState : uint8
+{
+	Idle,
+	Running,
+	Completed,
+	Cancelled
+};
+
+USTRUCT(BlueprintType)
+struct FSwuiTimeline
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	FName Id = NAME_None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	int64 Generation = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	float Duration = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	bool bReversed = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	ESwuiTimelineState State = ESwuiTimelineState::Idle;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	float StartGameTime = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	float CompleteGameTime = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	float CancelGameTime = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SimpleWebUI|Timeline")
+	float CancelProgress = 0.f;
+};
+
+// ---------------------------------------------------------------------------
+// Telemetry & Diagnostics (SWUI 1.5 Phase 0)
+// ---------------------------------------------------------------------------
+
+struct FSwuiRollingStat
+{
+	static constexpr int32 Capacity = 60;
+	float Samples[Capacity] = { 0.f };
+	int32 Count = 0;
+	int32 Index = 0;
+	float Min = 0.f;
+	float Max = 0.f;
+	float Avg = 0.f;
+
+	void Add(float Value)
+	{
+		Samples[Index] = Value;
+		Index = (Index + 1) % Capacity;
+		if (Count < Capacity)
+		{
+			++Count;
+		}
+
+		Min = Samples[0];
+		Max = Samples[0];
+		float Sum = 0.f;
+		for (int32 i = 0; i < Count; ++i)
+		{
+			Min = FMath::Min(Min, Samples[i]);
+			Max = FMath::Max(Max, Samples[i]);
+			Sum += Samples[i];
+		}
+		Avg = Count > 0 ? (Sum / Count) : 0.f;
+	}
+
+	void Reset()
+	{
+		Count = 0;
+		Index = 0;
+		Min = 0.f;
+		Max = 0.f;
+		Avg = 0.f;
+	}
+};
+
+struct FSwuiTelemetry
+{
+	// Core Counters (Section 6.1)
+	uint32 ObservedPropertiesNum = 0;
+	uint32 ChangedPropertiesNum = 0;
+	uint64 StateGeneration = 0;       // Incremented on discrete state flushes
+	uint64 FrameIndex = 0;            // Heartbeat/frame index
+	uint32 BeginFrameRequests = 0;
+	uint32 BeginFrameSkips = 0;
+	uint32 CefPaints = 0;
+	uint32 PresentedFrames = 0;
+	uint32 DroppedFrames = 0;
+	uint32 InputEventsReceived = 0;
+	uint32 InputEventsCoalesced = 0;
+
+	// Frame Timing & Latency (Section 6.2)
+	double LastStateFlushDurationMs = 0.0;
+	double LastBeginFrameRequestTime = 0.0;
+	double LastCefPaintTime = 0.0;
+	double LastUploadDurationMs = 0.0;
+	double LastPaintToPresentLatencyMs = 0.0;
+
+	// Rolling stats (ms)
+	FSwuiRollingStat StateFlushDuration;
+	FSwuiRollingStat PaintToPresentLatency;
+	FSwuiRollingStat UploadDuration;
+
+	// Timeline Specific Telemetry (Section 6.3)
+	FName  ActiveTimelineId = NAME_None;
+	uint64 TimelineGeneration = 0;
+	double TimelineStartGameTime = 0.0;
+	double TimelineDuration = 0.0;
+	double TimelineCompleteGameTime = 0.0;
+	double TimelineCancelGameTime = 0.0;
+	float  LastAuthoritativeProgress = 0.f;
+	float  LastPresentedProgress = 0.f;
+	float  TimelinePresentationError = 0.f;
+	FSwuiRollingStat TimelineError;
+	double CompletionPresentationDelayMs = 0.0;
+
+	// Periodic reporting
+	double LastLogStatsTime = 0.0;
+};
+

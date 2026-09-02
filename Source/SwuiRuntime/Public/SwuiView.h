@@ -256,6 +256,10 @@ private:
 	std::atomic<uint64> BlitGeneration{ 0 };
 	uint64 LastConsumedBlitGeneration = 0;
 
+	// Atomic paint counter bumped by OnPaint / OnAcceleratedPaint on CEF thread,
+	// drained by TickDeferredUpload on the game thread for thread-safe telemetry.
+	std::atomic<uint32> CefPaintsAtomic{ 0 };
+
 	UPROPERTY()
 	UMaterialInstanceDynamic* MaterialInstance = nullptr;
 
@@ -266,6 +270,18 @@ private:
 
 	bool bPointerInputEnabled = false;
 	bool bTextInputFocused = false;
+
+	// ---- Input Coalescing (SWUI 1.5 Phase 4) ----
+	bool bPendingCoalescedMouseMove = false;
+	int32 CoalescedMouseMoveBX = 0;
+	int32 CoalescedMouseMoveBY = 0;
+
+	float PendingAccumulatedWheelDeltaX = 0.f;
+	float PendingAccumulatedWheelDeltaY = 0.f;
+	int32 CoalescedWheelBX = 0;
+	int32 CoalescedWheelBY = 0;
+
+	void FlushCoalescedInput();
 
 	// ---- Browser frame pacing ----
 

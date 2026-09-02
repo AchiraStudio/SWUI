@@ -38,7 +38,7 @@ void SwuiManager::OnBeforeCommandLineProcessing(const CefString& process_type,
 	// Process-wide scheduler ceiling from Project Settings.
 	// Per-browser SetWindowlessFrameRate() still takes precedence per view.
 	const USwuiSettings* SwuiCfg = GetDefault<USwuiSettings>();
-	const int32 OsrRate = (SwuiCfg && SwuiCfg->CefOffscreenFrameRate > 0) ? SwuiCfg->CefOffscreenFrameRate : 300;
+	const int32 OsrRate = (SwuiCfg && SwuiCfg->CefOffscreenFrameRate > 0) ? SwuiCfg->CefOffscreenFrameRate : 60;
 	CommandLine->AppendSwitchWithValue("off-screen-frame-rate", TCHAR_TO_UTF8(*FString::FromInt(OsrRate)));
 	CommandLine->AppendSwitch("enable-font-antialiasing");
 	CommandLine->AppendSwitch("enable-media-stream");
@@ -56,7 +56,15 @@ void SwuiManager::OnBeforeCommandLineProcessing(const CefString& process_type,
 		CommandLine->AppendSwitch("enable-gpu-compositing");
 		CommandLine->AppendSwitch("enable-webgl");
 		CommandLine->AppendSwitch("enable-zero-copy");
-		CommandLine->AppendSwitch("disable-web-security");
+
+		bool bAllowDisableWebSecurity = false;
+#if WITH_EDITOR || !UE_BUILD_SHIPPING
+		bAllowDisableWebSecurity = SwuiCfg && SwuiCfg->bDisableWebSecurity;
+#endif
+		if (bAllowDisableWebSecurity)
+		{
+			CommandLine->AppendSwitch("disable-web-security");
+		}
 	}
 
 	CommandLine->AppendSwitchWithValue("enable-blink-features", "HTMLImports");

@@ -1,6 +1,8 @@
 #include "RenderHandler.h"
 #include "ISwuiRuntime.h"
 #include "SwuiView.h"
+#include "SwuiSettings.h"
+#include "SwuiCVars.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
 #include "Async/Async.h"
@@ -341,7 +343,22 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> Browser,
 
 bool BrowserClient::OnConsoleMessage(CefRefPtr<CefBrowser> Browser, cef_log_severity_t Level, const CefString& Message, const CefString& Source, int Line)
 {
-	UE_LOG(LogSwuiRuntime, Log, TEXT("CEF Console: %s"), *FString(Message.ToWString().c_str()));
+	const USwuiSettings* Settings = GetDefault<USwuiSettings>();
+	const bool bPassThroughErrors = Settings ? Settings->bPassThroughConsoleErrors : true;
+	const bool bVerbose = CVarSwuiVerbosePaint.GetValueOnAnyThread() != 0 || (Settings && Settings->bVerbosePaintLog);
+
+	if (Level >= LOGSEVERITY_ERROR && bPassThroughErrors)
+	{
+		UE_LOG(LogSwuiRuntime, Error, TEXT("CEF Console Error [%s:%d]: %s"), *FString(Source.ToWString().c_str()), Line, *FString(Message.ToWString().c_str()));
+	}
+	else if (Level == LOGSEVERITY_WARNING && bPassThroughErrors)
+	{
+		UE_LOG(LogSwuiRuntime, Warning, TEXT("CEF Console Warning [%s:%d]: %s"), *FString(Source.ToWString().c_str()), Line, *FString(Message.ToWString().c_str()));
+	}
+	else if (bVerbose)
+	{
+		UE_LOG(LogSwuiRuntime, Verbose, TEXT("CEF Console: %s"), *FString(Message.ToWString().c_str()));
+	}
 	return true;
 }
 

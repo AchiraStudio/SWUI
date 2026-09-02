@@ -790,6 +790,57 @@ void USwuiSubsystem::Tick(float DeltaTime)
 	// ── HUD ROI overlay ─────────────────────────────────────────────────
 	UpdateRoiOverlay();
 
+	// ── Periodic Diagnostic Telemetry Logging (swui.debug.Stats) ────────
+	const int32 DebugStatsCVar = CVarSwuiDebugStats.GetValueOnGameThread();
+	if (DebugStatsCVar > 0)
+	{
+		const double Now = FPlatformTime::Seconds();
+		if (Now - Telemetry.LastLogStatsTime >= 1.0)
+		{
+			Telemetry.LastLogStatsTime = Now;
+			const float PresentedFps = Telemetry.PaintToPresentLatency.Count > 0
+				? (1000.f / FMath::Max(1.f, Telemetry.PaintToPresentLatency.Avg))
+				: 0.f;
+
+			UE_LOG(LogSwuiRuntime, Log,
+				TEXT("[SWUI STATS] Frame: %llu | StateGen: %llu | Browser FPS: %.1f | Presented FPS: %.1f | Paint->Present: min=%.2fms avg=%.2fms max=%.2fms | Flush: min=%.2fms avg=%.2fms max=%.2fms | Props: %u (changed: %u) | Input: %u (coalesced: %u) | Dropped: %u"),
+				Telemetry.FrameIndex,
+				Telemetry.StateGeneration,
+				AvgFPS,
+				PresentedFps,
+				Telemetry.PaintToPresentLatency.Min,
+				Telemetry.PaintToPresentLatency.Avg,
+				Telemetry.PaintToPresentLatency.Max,
+				Telemetry.StateFlushDuration.Min,
+				Telemetry.StateFlushDuration.Avg,
+				Telemetry.StateFlushDuration.Max,
+				Telemetry.ObservedPropertiesNum,
+				Telemetry.ChangedPropertiesNum,
+				Telemetry.InputEventsReceived,
+				Telemetry.InputEventsCoalesced,
+				Telemetry.DroppedFrames);
+		}
+	}
+
+	const int32 TimelineStatsCVar = CVarSwuiDebugTimelineStats.GetValueOnGameThread();
+	if (TimelineStatsCVar > 0 && Telemetry.ActiveTimelineId != NAME_None)
+	{
+		const double Now = FPlatformTime::Seconds();
+		if (Now - Telemetry.LastLogStatsTime >= 0.5)
+		{
+			UE_LOG(LogSwuiRuntime, Log,
+				TEXT("[SWUI TIMELINE STATS] Timeline: %s (gen %llu) | AuthProgress: %.3f | PresentedProgress: %.3f | Error: %.3f (max: %.3f, avg: %.3f) | CompletionDelay: %.2fms"),
+				*Telemetry.ActiveTimelineId.ToString(),
+				Telemetry.TimelineGeneration,
+				Telemetry.LastAuthoritativeProgress,
+				Telemetry.LastPresentedProgress,
+				Telemetry.TimelinePresentationError,
+				Telemetry.TimelineError.Max,
+				Telemetry.TimelineError.Avg,
+				Telemetry.CompletionPresentationDelayMs);
+		}
+	}
+
 	// 3. Pump again after state flush & render commands to drain CEF tasks.
 	SwuiManager::DoSwuiMessageLoop();
 }
@@ -797,6 +848,8 @@ void USwuiSubsystem::Tick(float DeltaTime)
 bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 {
 	if (!View) return false;
+
+	const double FlushStartTime = FPlatformTime::Seconds();
 
 	const bool bFlushBeforeFrame =
 		SwuiCVarBool(
@@ -814,10 +867,16 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 	LastDeltaTime = DeltaTime;
 
 	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const float TimeDilation = GetWorld() ? GetWorld()->GetWorldSettings()->TimeDilation : 1.f;
+	const bool bIsPaused = GetWorld() ? GetWorld()->IsPaused() : false;
 	const uint64 FrameCounter = GFrameCounter;
+
+	Telemetry.ObservedPropertiesNum = ObservedProperties.Num();
+	Telemetry.FrameIndex = FrameCounter;
 
 	const bool bUseBatchStateSync = CVarSwuiBatchStateSync.GetValueOnGameThread() != 0;
 	FString BatchedScript;
+	int32 ChangedCount = 0;
 
 	if (bUseBatchStateSync)
 	{
@@ -848,6 +907,12 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 			}
 		}
 
+		ChangedCount = ChangedEntries.Num();
+		if (ChangedCount > 0)
+		{
+			++Telemetry.StateGeneration;
+		}
+
 		FString StateJson = ChangedEntries.Num() > 0
 			? FString::Printf(TEXT("{%s}"), *FString::Join(ChangedEntries, TEXT(",")))
 			: TEXT("null");
@@ -855,22 +920,18 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		BatchedScript = FString::Printf(
 			TEXT("(function(){")
 			TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,cefFps:%d,width:%d,height:%d};")
+			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,stateVersion:%llu,cefFps:%d,width:%d,height:%d,timeDilation:%.3f,paused:%s};")
 			TEXT("var u=%s;")
 			TEXT("if(u){if(s._batch){s._batch(u,s._runtime);}else{for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);}}}")
 			TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
 			TEXT("})()"),
-			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, CefFPS, View->Width, View->Height,
+			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, Telemetry.StateGeneration, CefFPS, View->Width, View->Height,
+			TimeDilation, bIsPaused ? TEXT("true") : TEXT("false"),
 			*StateJson);
 	}
 	else
 	{
 		// Legacy fallback
-		BatchedScript = FString::Printf(
-			TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,cefFps:%d,width:%d,height:%d};"),
-			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, CefFPS, View->Width, View->Height);
-
 		TArray<FString> PropertyAssignments;
 		for (int32 i = ObservedProperties.Num() - 1; i >= 0; --i)
 		{
@@ -895,8 +956,20 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 					TEXT("s.state['%s']=%s;if(s._notify)s._notify('%s',%s);"),
 					*Entry.NamespacedKey, *JSValue,
 					*Entry.NamespacedKey, *JSValue));
+				++ChangedCount;
 			}
 		}
+
+		if (ChangedCount > 0)
+		{
+			++Telemetry.StateGeneration;
+		}
+
+		BatchedScript = FString::Printf(
+			TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
+			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,stateVersion:%llu,cefFps:%d,width:%d,height:%d,timeDilation:%.3f,paused:%s};"),
+			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, Telemetry.StateGeneration, CefFPS, View->Width, View->Height,
+			TimeDilation, bIsPaused ? TEXT("true") : TEXT("false"));
 
 		for (const FString& Assign : PropertyAssignments)
 		{
@@ -905,6 +978,19 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 
 		BatchedScript += TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));})();");
 	}
+
+	Telemetry.ChangedPropertiesNum = ChangedCount;
+
+	// Update timeline telemetry if an active timeline is running
+	if (Telemetry.ActiveTimelineId != NAME_None)
+	{
+		const float AuthProg = GetTimelineProgress(Telemetry.ActiveTimelineId);
+		Telemetry.LastAuthoritativeProgress = AuthProg;
+	}
+
+	const double FlushEndTime = FPlatformTime::Seconds();
+	Telemetry.LastStateFlushDurationMs = (FlushEndTime - FlushStartTime) * 1000.0;
+	Telemetry.StateFlushDuration.Add(static_cast<float>(Telemetry.LastStateFlushDurationMs));
 
 	if (QueuedHudEventScripts.Num() > 0)
 	{
@@ -1256,3 +1342,149 @@ bool USwuiSubsystem::TryResolveActiveBindingTarget(UClass* RequiredClass, UObjec
 
 	return true;
 }
+
+// ---------------------------------------------------------------------------
+// Timeline Synchronization API (SWUI 1.5 Phase 2)
+// ---------------------------------------------------------------------------
+
+void USwuiSubsystem::StartTimeline(FName Id, float Duration, bool bReversed)
+{
+	if (Id == NAME_None) return;
+
+	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const uint64 Gen = NextTimelineGeneration++;
+
+	FSwuiTimeline Timeline;
+	Timeline.Id = Id;
+	Timeline.Generation = Gen;
+	Timeline.Duration = FMath::Max(0.001f, Duration);
+	Timeline.bReversed = bReversed;
+	Timeline.State = ESwuiTimelineState::Running;
+	Timeline.StartGameTime = static_cast<float>(WorldTime);
+	Timeline.CompleteGameTime = 0.f;
+	Timeline.CancelGameTime = 0.f;
+	Timeline.CancelProgress = 0.f;
+
+	ActiveTimelines.Add(Id, Timeline);
+
+	Telemetry.ActiveTimelineId = Id;
+	Telemetry.TimelineGeneration = Gen;
+	Telemetry.TimelineStartGameTime = WorldTime;
+	Telemetry.TimelineDuration = Timeline.Duration;
+
+	const FString Script = FString::Printf(
+		TEXT("window.dispatchEvent(new CustomEvent('swui:timelineStart', { detail: { id: '%s', generation: %llu, startGameTime: %.4f, duration: %.4f, reversed: %s } }));"),
+		*Id.ToString(),
+		Gen,
+		WorldTime,
+		Timeline.Duration,
+		bReversed ? TEXT("true") : TEXT("false"));
+
+	QueueHudEventScript(Script);
+}
+
+void USwuiSubsystem::CompleteTimeline(FName Id)
+{
+	FSwuiTimeline* Found = ActiveTimelines.Find(Id);
+	if (!Found || Found->State != ESwuiTimelineState::Running)
+	{
+		return;
+	}
+
+	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	Found->State = ESwuiTimelineState::Completed;
+	Found->CompleteGameTime = static_cast<float>(WorldTime);
+
+	Telemetry.TimelineCompleteGameTime = WorldTime;
+	Telemetry.LastAuthoritativeProgress = 1.0f;
+
+	const FString Script = FString::Printf(
+		TEXT("window.dispatchEvent(new CustomEvent('swui:timelineComplete', { detail: { id: '%s', generation: %llu, completeGameTime: %.4f } }));"),
+		*Id.ToString(),
+		Found->Generation,
+		WorldTime);
+
+	QueueHudEventScript(Script);
+}
+
+void USwuiSubsystem::CancelTimeline(FName Id, float CancelGameTime)
+{
+	FSwuiTimeline* Found = ActiveTimelines.Find(Id);
+	if (!Found || Found->State != ESwuiTimelineState::Running)
+	{
+		return;
+	}
+
+	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const float EffectiveCancelTime = (CancelGameTime >= 0.f) ? CancelGameTime : static_cast<float>(WorldTime);
+
+	Found->State = ESwuiTimelineState::Cancelled;
+	Found->CancelGameTime = EffectiveCancelTime;
+	const float Elapsed = EffectiveCancelTime - Found->StartGameTime;
+	Found->CancelProgress = Found->Duration > 0.f ? FMath::Clamp(Elapsed / Found->Duration, 0.f, 1.f) : 0.f;
+	if (Found->bReversed)
+	{
+		Found->CancelProgress = 1.0f - Found->CancelProgress;
+	}
+
+	Telemetry.TimelineCancelGameTime = EffectiveCancelTime;
+	Telemetry.LastAuthoritativeProgress = Found->CancelProgress;
+
+	const FString Script = FString::Printf(
+		TEXT("window.dispatchEvent(new CustomEvent('swui:timelineCancel', { detail: { id: '%s', generation: %llu, cancelGameTime: %.4f, cancelProgress: %.4f } }));"),
+		*Id.ToString(),
+		Found->Generation,
+		EffectiveCancelTime,
+		Found->CancelProgress);
+
+	QueueHudEventScript(Script);
+}
+
+float USwuiSubsystem::GetTimelineProgress(FName Id) const
+{
+	const FSwuiTimeline* Found = ActiveTimelines.Find(Id);
+	if (!Found) return 0.f;
+
+	if (Found->State == ESwuiTimelineState::Completed)
+	{
+		return 1.0f;
+	}
+	if (Found->State == ESwuiTimelineState::Cancelled)
+	{
+		return Found->CancelProgress;
+	}
+	if (Found->State == ESwuiTimelineState::Running)
+	{
+		if (Found->Duration <= 0.f) return 1.0f;
+		const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		const float Elapsed = static_cast<float>(WorldTime) - Found->StartGameTime;
+		const float Raw = FMath::Clamp(Elapsed / Found->Duration, 0.f, 1.f);
+		return Found->bReversed ? (1.0f - Raw) : Raw;
+	}
+	return 0.f;
+}
+
+bool USwuiSubsystem::IsTimelineActive(FName Id) const
+{
+	const FSwuiTimeline* Found = ActiveTimelines.Find(Id);
+	return Found && Found->State == ESwuiTimelineState::Running;
+}
+
+int64 USwuiSubsystem::GetTimelineGeneration(FName Id) const
+{
+	const FSwuiTimeline* Found = ActiveTimelines.Find(Id);
+	return Found ? Found->Generation : 0;
+}
+
+bool USwuiSubsystem::GetTimelineData(FName Id, FSwuiTimeline& OutTimeline) const
+{
+	const FSwuiTimeline* Found = ActiveTimelines.Find(Id);
+	if (Found)
+	{
+		OutTimeline = *Found;
+		return true;
+	}
+	OutTimeline = FSwuiTimeline{};
+	return false;
+}
+

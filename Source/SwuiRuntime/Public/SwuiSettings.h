@@ -31,22 +31,21 @@ public:
 
 	/**
 	 * CEF process-wide off-screen frame rate ceiling.
-	 * Passed as the --off-screen-frame-rate command-line switch at startup,
-	 * so it affects all browser instances. Must be >= DefaultViewFrameRate.
-	 * Set to 300 for 144/165/240 Hz HUDs. Requires an editor restart.
+	 * Passed as the --off-screen-frame-rate command-line switch at startup.
+	 * Default is 60 FPS. Set to monitor refresh rate (144, 165, 240, …) if higher framerates are required.
+	 * Requires an editor restart.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category="Rendering|Frame Rate",
 		meta=(ClampMin="10", ClampMax="300", UIMin="30", UIMax="300"))
-	int32 CefOffscreenFrameRate = 300;
+	int32 CefOffscreenFrameRate = 60;
 
 	/**
 	 * Default per-view windowless frame rate passed to SetWindowlessFrameRate()
-	 * when each CEF browser is created. 0 = use the engine MaxFPS setting,
-	 * falling back to 300. Set to your monitor refresh rate (144, 165, 240, …).
+	 * when each CEF browser is created. Default is 60 FPS.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category="Rendering|Frame Rate",
 		meta=(ClampMin="0", ClampMax="300"))
-	int32 DefaultViewFrameRate = 0;
+	int32 DefaultViewFrameRate = 60;
 
 	// -----------------------------------------------------------------------
 	// Rendering | Upload Strategy
@@ -81,15 +80,34 @@ public:
 	/**
 	 * Low-latency frame pacing mode.
 	 * When active, sets r.OneFrameThreadLag=0 to reduce HUD/menu visual latency.
+	 * Default is Disabled so engine-wide CVars are not modified automatically.
 	 * The previous value is restored when the condition no longer applies.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category="Frame Pacing",
 		meta=(DisplayName="Low Latency Frame Pacing"))
-	ESwuiLowLatencyFramePacingMode LowLatencyFramePacingMode = ESwuiLowLatencyFramePacingMode::WhileAnySwuiViewActive;
+	ESwuiLowLatencyFramePacingMode LowLatencyFramePacingMode = ESwuiLowLatencyFramePacingMode::Disabled;
 
 	// -----------------------------------------------------------------------
-	// Debug | Profiling
+	// Security
 	// -----------------------------------------------------------------------
+
+	/**
+	 * Allows disabling web security (--disable-web-security) in non-shipping development/editor builds.
+	 * Never active in shipping builds.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Security")
+	bool bDisableWebSecurity = false;
+
+	// -----------------------------------------------------------------------
+	// Debug | Logging
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Forward CEF console warnings and errors to the Unreal output log.
+	 * Info and verbose console messages are suppressed unless verbose logging is active.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Debug|Logging")
+	bool bPassThroughConsoleErrors = true;
 
 	// -----------------------------------------------------------------------
 	// Quality of Life

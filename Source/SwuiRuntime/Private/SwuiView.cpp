@@ -28,6 +28,7 @@
 #include "TextureResource.h"
 #include "Widgets/SViewport.h"
 
+#include "SwuiSubsystem.h"
 #include "SwuiFullSurfaceCpuRenderer.h"
 #include "SwuiSettings.h"
 
@@ -283,27 +284,22 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		return;
 	}
 
-	int32 TargetFPS = 300;
-	int32 DetectedMonitorHz = 240;
-	if (GEngine)
-	{
-		DetectedMonitorHz = FMath::RoundToInt(GEngine->GetMaxFPS());
-	}
+	int32 TargetFPS = 60;
 	if (InstanceSettings.OverrideFrameRate > 0)
 	{
 		TargetFPS = InstanceSettings.OverrideFrameRate;
-	}
-	else if (Settings && Settings->DefaultViewFrameRate > 0)
-	{
-		TargetFPS = Settings->DefaultViewFrameRate;
 	}
 	else if (InitHudMaxBrowserFps > 0)
 	{
 		TargetFPS = InitHudMaxBrowserFps;
 	}
+	else if (Settings && Settings->DefaultViewFrameRate > 0)
+	{
+		TargetFPS = Settings->DefaultViewFrameRate;
+	}
 	else
 	{
-		TargetFPS = FMath::Clamp(DetectedMonitorHz > 0 ? DetectedMonitorHz : 240, 60, 360);
+		TargetFPS = 60;
 	}
 
 	CefRefPtr<CefBrowserHost> Host = Browser->GetHost();
@@ -836,6 +832,19 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 		}
 
 		++Stat_ExternalBeginFrames;
+
+		if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+		{
+			Subsystem->GetTelemetryMutable().BeginFrameRequests++;
+			Subsystem->GetTelemetryMutable().LastBeginFrameRequestTime = Now;
+		}
+	}
+	else
+	{
+		if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+		{
+			Subsystem->GetTelemetryMutable().BeginFrameSkips++;
+		}
 	}
 
 	if (bHasScript || bWillSendBeginFrame)
@@ -936,6 +945,7 @@ void USwuiView::OnPaint(
 		}
 
 		bHasPendingFullSurfacePaint = true;
+		CefPaintsAtomic.fetch_add(1, std::memory_order_relaxed);
 	}
 
 	// Stage the frame: either ROI direct path or full-surface pool.
@@ -1010,6 +1020,7 @@ void USwuiView::OnAcceleratedPaint(
 		}
 
 		bHasPendingFullSurfacePaint = true;
+		CefPaintsAtomic.fetch_add(1, std::memory_order_relaxed);
 	}
 
 #if PLATFORM_WINDOWS
@@ -1064,6 +1075,18 @@ void USwuiView::TickDeferredUpload()
 	const double Now = FPlatformTime::Seconds();
 	++Stat_ViewUploadTicks;
 
+	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+	{
+		const uint32 DeltaPaints = CefPaintsAtomic.exchange(0, std::memory_order_relaxed);
+		if (DeltaPaints > 0)
+		{
+			Subsystem->GetTelemetryMutable().CefPaints += DeltaPaints;
+		}
+	}
+
+	// Flush coalesced input before driving next frame
+	FlushCoalescedInput();
+
 	const bool bDebugForceEveryTick = IsForceFullFrameMode();
 
 	// Pick up any size CEF reported from its renderer thread since our last
@@ -1087,6 +1110,17 @@ void USwuiView::TickDeferredUpload()
 			if (MaterialInstance)
 			{
 				MaterialInstance->SetTextureParameterValue(TextureParameterName, Texture);
+			}
+
+			if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+			{
+				Subsystem->GetTelemetryMutable().PresentedFrames++;
+				if (LastPaintArrivalTime > 0.0)
+				{
+					const double LatencyMs = (Now - LastPaintArrivalTime) * 1000.0;
+					Subsystem->GetTelemetryMutable().LastPaintToPresentLatencyMs = LatencyMs;
+					Subsystem->GetTelemetryMutable().PaintToPresentLatency.Add(static_cast<float>(LatencyMs));
+				}
 			}
 		}
 	}
@@ -1863,6 +1897,51 @@ bool USwuiView::ScreenToBrowserPixel(const FVector2D& ScreenPos, int32& OutX, in
 	return true;
 }
 
+void USwuiView::FlushCoalescedInput()
+{
+	if (!CefData || !CefData->Browser)
+	{
+		return;
+	}
+
+	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
+	if (!Host)
+	{
+		return;
+	}
+
+	if (bPendingCoalescedMouseMove)
+	{
+		bPendingCoalescedMouseMove = false;
+
+		CefMouseEvent Event;
+		Event.x = CoalescedMouseMoveBX;
+		Event.y = CoalescedMouseMoveBY;
+		Event.modifiers = 0;
+
+		Host->SendMouseMoveEvent(Event, false);
+	}
+
+	if (FMath::Abs(PendingAccumulatedWheelDeltaX) > KINDA_SMALL_NUMBER || FMath::Abs(PendingAccumulatedWheelDeltaY) > KINDA_SMALL_NUMBER)
+	{
+		const int32 CefDeltaX = FMath::RoundToInt(PendingAccumulatedWheelDeltaX * 120.0f);
+		const int32 CefDeltaY = FMath::RoundToInt(PendingAccumulatedWheelDeltaY * 120.0f);
+
+		PendingAccumulatedWheelDeltaX = 0.f;
+		PendingAccumulatedWheelDeltaY = 0.f;
+
+		if (CefDeltaX != 0 || CefDeltaY != 0)
+		{
+			CefMouseEvent Event;
+			Event.x = CoalescedWheelBX;
+			Event.y = CoalescedWheelBY;
+			Event.modifiers = 0;
+
+			Host->SendMouseWheelEvent(Event, CefDeltaX, CefDeltaY);
+		}
+	}
+}
+
 bool USwuiView::ForwardMouseMoveToBrowser(const FVector2D& ScreenPosition)
 {
 	if (!bPointerInputEnabled)
@@ -1875,12 +1954,6 @@ bool USwuiView::ForwardMouseMoveToBrowser(const FVector2D& ScreenPosition)
 		return false;
 	}
 
-	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
-	if (!Host)
-	{
-		return false;
-	}
-
 	int32 BX = 0;
 	int32 BY = 0;
 	if (!ScreenToBrowserPixel(ScreenPosition, BX, BY))
@@ -1888,12 +1961,18 @@ bool USwuiView::ForwardMouseMoveToBrowser(const FVector2D& ScreenPosition)
 		return false;
 	}
 
-	CefMouseEvent Event;
-	Event.x = BX;
-	Event.y = BY;
-	Event.modifiers = 0;
+	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+	{
+		Subsystem->GetTelemetryMutable().InputEventsReceived++;
+		if (bPendingCoalescedMouseMove)
+		{
+			Subsystem->GetTelemetryMutable().InputEventsCoalesced++;
+		}
+	}
 
-	Host->SendMouseMoveEvent(Event, false);
+	bPendingCoalescedMouseMove = true;
+	CoalescedMouseMoveBX = BX;
+	CoalescedMouseMoveBY = BY;
 
 	if (CVarSwuiVerbosePaint.GetValueOnAnyThread() != 0)
 	{
@@ -1944,6 +2023,9 @@ bool USwuiView::ForwardMouseButtonToBrowser(
 		return false;
 	}
 
+	// Flush any pending coalesced move/wheel prior to mouse click
+	FlushCoalescedInput();
+
 	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
 	if (!Host)
 	{
@@ -1965,6 +2047,11 @@ bool USwuiView::ForwardMouseButtonToBrowser(
 	Event.modifiers = 0;
 
 	Host->SendMouseClickEvent(Event, CefButton, bMouseUp, ClickCount);
+
+	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+	{
+		Subsystem->GetTelemetryMutable().InputEventsReceived++;
+	}
 
 	const TCHAR* Action = bMouseUp ? TEXT("Up") : TEXT("Down");
 
@@ -1994,12 +2081,6 @@ bool USwuiView::ForwardMouseWheelToBrowser(
 		return false;
 	}
 
-	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
-	if (!Host)
-	{
-		return false;
-	}
-
 	int32 BX = 0;
 	int32 BY = 0;
 	if (!ScreenToBrowserPixel(ScreenPosition, BX, BY))
@@ -2007,22 +2088,15 @@ bool USwuiView::ForwardMouseWheelToBrowser(
 		return false;
 	}
 
-	const int32 CefDeltaX = FMath::RoundToInt(DeltaX * 120.0f);
-	const int32 CefDeltaY = FMath::RoundToInt(DeltaY * 120.0f);
+	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+	{
+		Subsystem->GetTelemetryMutable().InputEventsReceived++;
+	}
 
-	CefMouseEvent Event;
-	Event.x = BX;
-	Event.y = BY;
-	Event.modifiers = 0;
-
-	Host->SendMouseWheelEvent(Event, CefDeltaX, CefDeltaY);
-
-	UE_LOG(LogSwuiRuntime, Log,
-		TEXT("[SwuiPointer] Wheel: delta=(%d, %d)  (%d, %d)"),
-		CefDeltaX,
-		CefDeltaY,
-		BX,
-		BY);
+	PendingAccumulatedWheelDeltaX += DeltaX;
+	PendingAccumulatedWheelDeltaY += DeltaY;
+	CoalescedWheelBX = BX;
+	CoalescedWheelBY = BY;
 
 	return true;
 }
@@ -2058,18 +2132,18 @@ bool USwuiView::ForwardMouseMoveAtPixel(int32 BX, int32 BY)
 		return false;
 	}
 
-	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
-	if (!Host)
+	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
 	{
-		return false;
+		Subsystem->GetTelemetryMutable().InputEventsReceived++;
+		if (bPendingCoalescedMouseMove)
+		{
+			Subsystem->GetTelemetryMutable().InputEventsCoalesced++;
+		}
 	}
 
-	CefMouseEvent Event;
-	Event.x = BX;
-	Event.y = BY;
-	Event.modifiers = 0;
-
-	Host->SendMouseMoveEvent(Event, false);
+	bPendingCoalescedMouseMove = true;
+	CoalescedMouseMoveBX = BX;
+	CoalescedMouseMoveBY = BY;
 
 	UE_LOG(LogSwuiRuntime, Verbose,
 		TEXT("[SwuiPointer] WorldMouseMove: browser (%d, %d)"),
@@ -2090,6 +2164,9 @@ bool USwuiView::ForwardMouseButtonAtPixel(int32 BX, int32 BY, FKey Button, bool 
 		return false;
 	}
 
+	// Flush any pending coalesced move/wheel prior to mouse click
+	FlushCoalescedInput();
+
 	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
 	if (!Host)
 	{
@@ -2104,6 +2181,11 @@ bool USwuiView::ForwardMouseButtonAtPixel(int32 BX, int32 BY, FKey Button, bool 
 	Event.modifiers = 0;
 
 	Host->SendMouseClickEvent(Event, CefButton, bMouseUp, ClickCount);
+
+	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+	{
+		Subsystem->GetTelemetryMutable().InputEventsReceived++;
+	}
 
 	UE_LOG(LogSwuiRuntime, Log,
 		TEXT("[SwuiPointer] WorldMouseButton %s %s  clickCount=%d  (%d, %d)"),
@@ -2127,25 +2209,15 @@ bool USwuiView::ForwardMouseWheelAtPixel(int32 BX, int32 BY, float DeltaX, float
 		return false;
 	}
 
-	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
-	if (!Host)
+	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
 	{
-		return false;
+		Subsystem->GetTelemetryMutable().InputEventsReceived++;
 	}
 
-	const int32 CefDeltaX = FMath::RoundToInt(DeltaX * 120.0f);
-	const int32 CefDeltaY = FMath::RoundToInt(DeltaY * 120.0f);
-
-	CefMouseEvent Event;
-	Event.x = BX;
-	Event.y = BY;
-	Event.modifiers = 0;
-
-	Host->SendMouseWheelEvent(Event, CefDeltaX, CefDeltaY);
-
-	UE_LOG(LogSwuiRuntime, Log,
-		TEXT("[SwuiPointer] WorldWheel: delta=(%d, %d)  (%d, %d)"),
-		CefDeltaX, CefDeltaY, BX, BY);
+	PendingAccumulatedWheelDeltaX += DeltaX;
+	PendingAccumulatedWheelDeltaY += DeltaY;
+	CoalescedWheelBX = BX;
+	CoalescedWheelBY = BY;
 
 	return true;
 }
@@ -2203,6 +2275,12 @@ bool USwuiView::ForwardKeyEventToBrowser(const FKeyEvent& KeyEvent, bool bKeyUp)
 	if (Mods.IsCommandDown())  Event.modifiers |= EVENTFLAG_COMMAND_DOWN;
 
 	Host->SendKeyEvent(Event);
+
+	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+	{
+		Subsystem->GetTelemetryMutable().InputEventsReceived++;
+	}
+
 	return true;
 }
 

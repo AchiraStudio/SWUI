@@ -183,6 +183,42 @@ public:
 	UFUNCTION(BlueprintCallable, Category="SimpleWebUI", meta=(DefaultToSelf="Source"))
 	void Unobserve(UObject* Source);
 
+	// ---- Timeline Synchronization API (SWUI 1.5 Phase 2) ----
+
+	/** Starts a timeline with authoritative start game time and a dedicated monotonic generation. */
+	UFUNCTION(BlueprintCallable, Category="SimpleWebUI|Timeline")
+	void StartTimeline(FName Id, float Duration, bool bReversed = false);
+
+	/** Authoritatively completes a timeline, setting progress to exactly 1.0. */
+	UFUNCTION(BlueprintCallable, Category="SimpleWebUI|Timeline")
+	void CompleteTimeline(FName Id);
+
+	/**
+	 * Authoritatively cancels a timeline at a specific game time or current game time.
+	 * Progress is derived strictly from (CancelGameTime - StartGameTime) / Duration.
+	 */
+	UFUNCTION(BlueprintCallable, Category="SimpleWebUI|Timeline")
+	void CancelTimeline(FName Id, float CancelGameTime = -1.f);
+
+	/**
+	 * Returns authoritative Unreal / game-time progress in [0, 1.0].
+	 * Invariant: Never queries or reflects browser presentation progress.
+	 */
+	UFUNCTION(BlueprintPure, Category="SimpleWebUI|Timeline")
+	float GetTimelineProgress(FName Id) const;
+
+	/** Returns true if the timeline is currently running. */
+	UFUNCTION(BlueprintPure, Category="SimpleWebUI|Timeline")
+	bool IsTimelineActive(FName Id) const;
+
+	/** Returns the active generation ID for this timeline run. */
+	UFUNCTION(BlueprintPure, Category="SimpleWebUI|Timeline")
+	int64 GetTimelineGeneration(FName Id) const;
+
+	/** Returns the timeline data struct for inspection. */
+	UFUNCTION(BlueprintPure, Category="SimpleWebUI|Timeline")
+	bool GetTimelineData(FName Id, FSwuiTimeline& OutTimeline) const;
+
 	// Access the cached delegate payload shapes (used by TS codegen).
 	const TArray<FSwuiObservedDelegate>& GetObservedDelegates() const { return ObservedDelegates; }
 	const TArray<FSwuiObservedProperty>& GetObservedProperties() const { return ObservedProperties; }
@@ -208,6 +244,12 @@ private:
 	TArray<FSwuiObservedProperty> ObservedProperties;
 	TArray<FSwuiObservedDelegate> ObservedDelegates;
 	TArray<FSwuiBindingSource>    CachedBindingSources;
+
+	/** Active authoritative timelines (SWUI 1.5 Phase 2) */
+	UPROPERTY()
+	TMap<FName, FSwuiTimeline> ActiveTimelines;
+
+	uint64 NextTimelineGeneration = 1;
 
 	/** Function-backed command registry — built by RebuildCommandRuntime. */
 	TMap<FGameplayTag, FSwuiFunctionCommand> FunctionCommands;
@@ -266,4 +308,11 @@ public:
 	ESwuiLowLatencyFramePacingMode LastAppliedFramePacingMode = ESwuiLowLatencyFramePacingMode::Disabled;
 
 	bool bFocusScriptInjected = false;
+
+	// ---- Telemetry & Diagnostics (SWUI 1.5 Phase 0) ----
+	const FSwuiTelemetry& GetTelemetry() const { return Telemetry; }
+	FSwuiTelemetry& GetTelemetryMutable() { return Telemetry; }
+
+private:
+	FSwuiTelemetry Telemetry;
 };
