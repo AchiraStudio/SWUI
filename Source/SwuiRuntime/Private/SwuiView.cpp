@@ -5,6 +5,7 @@
 #include "SwuiCVarHelpers.h"
 #include "SwuiManager.h"
 #include "SwuiNavigation.h"
+#include "SwuiGpuSharedTextureHelper.h"
 
 #include "Components/ActorComponent.h"
 #include "GameFramework/Actor.h"
@@ -25,7 +26,9 @@
 #include "RenderingThread.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "JsonObjectConverter.h"
 #include "TextureResource.h"
+
 #include "Widgets/SViewport.h"
 
 #include "SwuiSubsystem.h"
@@ -226,19 +229,21 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		InstanceSettings.RenderingMode == ESwuiRenderingMode::Auto));
 
 #if PLATFORM_WINDOWS
-	const bool bIsD3D11 = GDynamicRHI && (FCString::Strcmp(GDynamicRHI->GetName(), TEXT("D3D11")) == 0);
-	if (bWantsGpu && bIsD3D11)
+	const bool bSupportsGpu = FSwuiGpuSharedTextureHelper::IsGpuAccelerationSupported();
+	if (bWantsGpu && bSupportsGpu)
 	{
+		GpuHelper = MakeShared<FSwuiGpuSharedTextureHelper>();
 		Info.shared_texture_enabled = 1;
 		ResolvedRenderingMode = ESwuiRenderingMode::GpuAccelerated;
 	}
 	else
 	{
+		GpuHelper.Reset();
 		Info.shared_texture_enabled = 0;
 		ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
 	}
 #else
-
+	GpuHelper.Reset();
 	Info.shared_texture_enabled = 0;
 	ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
 #endif
@@ -246,14 +251,22 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 	if (bVerboseLog)
 	{
 		UE_LOG(LogSwuiRuntime, Log,
-			TEXT("[SWUI RENDER] Resolved mode: %s (requested=%d, shared_texture=%d)"),
-			ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated ? TEXT("GPU Accelerated (Shared Texture Zero-Copy)") : TEXT("CPU Compatible (FullSurface)"),
+			TEXT("[SWUI RENDER] Resolved mode: %s (requested=%d, shared_texture=%d, RHI=%s)"),
+			ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated ? TEXT("GPU Accelerated (Native DirectX Shared Texture)") : TEXT("CPU Compatible (FullSurface)"),
 			(int32)InstanceSettings.RenderingMode,
-			Info.shared_texture_enabled);
+			Info.shared_texture_enabled,
+			GDynamicRHI ? GDynamicRHI->GetName() : TEXT("None"));
 	}
 
 	CefBrowserSettings BrowserSettings;
 	BrowserSettings.webgl = STATE_ENABLED;
+
+	const int32 TargetHz = FMath::Clamp(
+		InitHudMaxBrowserFps > 0 ? InitHudMaxBrowserFps : InstanceSettings.MaxBrowserFramesPerSecond,
+		30,
+		240);
+	WindowlessFrameRate = TargetHz > 0 ? TargetHz : 120;
+	BrowserSettings.windowless_frame_rate = WindowlessFrameRate;
 
 	ISwuiRenderTarget* CpuTarget = static_cast<ISwuiRenderTarget*>(this);
 	ISwuiAcceleratedRenderTarget* GpuTarget = (ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated)
@@ -284,7 +297,7 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		return;
 	}
 
-	int32 TargetFPS = 60;
+	int32 TargetFPS = WindowlessFrameRate > 0 ? WindowlessFrameRate : 120;
 	if (InstanceSettings.OverrideFrameRate > 0)
 	{
 		TargetFPS = InstanceSettings.OverrideFrameRate;
@@ -293,14 +306,15 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 	{
 		TargetFPS = InitHudMaxBrowserFps;
 	}
+	else if (InstanceSettings.MaxBrowserFramesPerSecond > 0)
+	{
+		TargetFPS = InstanceSettings.MaxBrowserFramesPerSecond;
+	}
 	else if (Settings && Settings->DefaultViewFrameRate > 0)
 	{
 		TargetFPS = Settings->DefaultViewFrameRate;
 	}
-	else
-	{
-		TargetFPS = 60;
-	}
+	TargetFPS = FMath::Clamp(TargetFPS, 30, 240);
 
 	CefRefPtr<CefBrowserHost> Host = Browser->GetHost();
 
@@ -618,6 +632,19 @@ bool USwuiView::HandleIncomingQuery(const FString& QueryJson, FString& OutRespon
 					OutResponseJson = FString::Printf(TEXT("\"%s\""), *StrProp->GetPropertyValue_InContainer(Buffer));
 					return true;
 				}
+				else if (FStructProperty* StructProp = CastField<FStructProperty>(ReturnProp))
+				{
+					TSharedRef<FJsonObject> OutJsonObject = MakeShared<FJsonObject>();
+					const void* StructValuePtr = ReturnProp->ContainerPtrToValuePtr<void>(Buffer);
+					if (FJsonObjectConverter::UStructToJsonObject(StructProp->Struct, StructValuePtr, OutJsonObject, 0, 0))
+					{
+						const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+							TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&OutResponseJson);
+						FJsonSerializer::Serialize(OutJsonObject, Writer);
+						return true;
+					}
+				}
+
 			}
 		}
 	}
@@ -788,7 +815,7 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 		ExternalBeginFrameAccumulatedTime = MinInterval;
 	}
 
-	bool bWillSendBeginFrame = bForceFrame;
+	bool bWillSendBeginFrame = bForceFrame || bHasScript;
 
 	if (!bWillSendBeginFrame)
 	{
@@ -1024,49 +1051,14 @@ void USwuiView::OnAcceleratedPaint(
 	}
 
 #if PLATFORM_WINDOWS
-	HANDLE HandleCopy = static_cast<HANDLE>(SharedHandle);
-
-	ENQUEUE_RENDER_COMMAND(SwuiGpuSharedTextureBlit)(
-		[TexRes, HandleCopy](FRHICommandListImmediate& RHICmdList)
+	FRHITexture* DestRHI = TexRes->TextureRHI.GetReference();
+	if (DestRHI && GpuHelper.IsValid())
+	{
+		if (GpuHelper->BlitSharedTexture(SharedHandle, DestRHI, InWidth, InHeight))
 		{
-			if (!TexRes || !TexRes->TextureRHI)
-			{
-				return;
-			}
-
-			FRHITexture* DestRHI = TexRes->TextureRHI.GetReference();
-			if (!DestRHI)
-			{
-				return;
-			}
-
-			if (GDynamicRHI && FCString::Strcmp(GDynamicRHI->GetName(), TEXT("D3D11")) == 0)
-			{
-				ID3D11Device* Device = static_cast<ID3D11Device*>(GDynamicRHI->RHIGetNativeDevice());
-				if (Device)
-				{
-					ID3D11Texture2D* SharedTex = nullptr;
-					HRESULT hr = Device->OpenSharedResource(HandleCopy, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&SharedTex));
-					if (SUCCEEDED(hr) && SharedTex)
-					{
-						ID3D11Texture2D* NativeDst = static_cast<ID3D11Texture2D*>(DestRHI->GetNativeResource());
-						if (NativeDst)
-						{
-							ID3D11DeviceContext* Context = nullptr;
-							Device->GetImmediateContext(&Context);
-							if (Context)
-							{
-								Context->CopyResource(NativeDst, SharedTex);
-								Context->Release();
-							}
-						}
-						SharedTex->Release();
-					}
-				}
-			}
-		});
-
-	BlitGeneration.fetch_add(1, std::memory_order_release);
+			BlitGeneration.fetch_add(1, std::memory_order_release);
+		}
+	}
 #endif
 }
 
@@ -1123,6 +1115,10 @@ void USwuiView::TickDeferredUpload()
 				}
 			}
 		}
+
+		DriveContinuousBrowserFrame(Now, bDebugForceEveryTick);
+		LogFullSurfaceStatsIfNeeded(Now);
+		return;
 	}
 
 	DriveContinuousBrowserFrame(Now, bDebugForceEveryTick);
@@ -1230,7 +1226,9 @@ void USwuiView::DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTic
 
 	FString ScriptToSend = MoveTemp(PendingScript);
 
-	if (bDebugForceEveryTick)
+	// If there are queued scripts (e.g. state sync, progress bar updates), dispatch immediately
+	// without buffering or clumping!
+	if (bDebugForceEveryTick || !ScriptToSend.IsEmpty())
 	{
 		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), true);
 		LastBrowserFrameTime = Now;
@@ -1255,20 +1253,8 @@ void USwuiView::DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTic
 
 	if (LastBrowserFrameTime <= 0.0 || (Now - LastBrowserFrameTime) >= (MinInterval - Tolerance))
 	{
-		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), false);
+		FlushHudStateAndRequestBrowserFrame(TEXT(""), static_cast<float>(DeltaSeconds), false);
 		LastBrowserFrameTime = Now;
-	}
-	else if (!ScriptToSend.IsEmpty())
-	{
-		// Preserve queued script if the frame interval is not yet due
-		if (PendingScript.IsEmpty())
-		{
-			PendingScript = MoveTemp(ScriptToSend);
-		}
-		else
-		{
-			PendingScript = ScriptToSend + TEXT(";") + PendingScript;
-		}
 	}
 }
 
@@ -2320,6 +2306,12 @@ bool USwuiView::ForwardCharToBrowser(TCHAR Char, const FModifierKeysState& Modif
 
 void USwuiView::BeginDestroy()
 {
+	if (GpuHelper.IsValid())
+	{
+		GpuHelper->Shutdown();
+		GpuHelper.Reset();
+	}
+
 	if (CefData && CefData->Browser)
 	{
 		CefData->Browser->GetHost()->CloseBrowser(true);

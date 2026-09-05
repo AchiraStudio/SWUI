@@ -6,3 +6,4 @@ Build/*
 Saved/*
 DerivedDataCache/*
 build-loop.ps1
+sample_webui_plugin_trial/

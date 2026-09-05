@@ -167,11 +167,11 @@ public:
 
 	/** For HUD views, lock browser updates to UE-driven scheduling. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|Performance|HUD Frame Lock", meta=(EditCondition="bIsHUD"))
-	bool bUseUEFrameLockedBrowser = true;
+	bool bUseUEFrameLockedBrowser = false;
 
 	/** Enable CEF external begin frames for HUD lock-step where available. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|Performance|HUD Frame Lock", meta=(EditCondition="bIsHUD && bUseUEFrameLockedBrowser"))
-	bool bUseExternalBeginFrames = true;
+	bool bUseExternalBeginFrames = false;
 
 	/** Send external begin frames from subsystem Tick when external mode is active. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|Performance|HUD Frame Lock", meta=(EditCondition="bIsHUD && bUseUEFrameLockedBrowser && bUseExternalBeginFrames"))

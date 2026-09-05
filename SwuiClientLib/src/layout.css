@@ -165,3 +165,40 @@
   content-visibility: auto;
 }
 
+/* Lightweight, GPU-composited glitch animation class
+   Uses transform + opacity only (zero reflow, zero repaint, pure compositor step) */
+.swui-glitch {
+  position: relative;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  contain: layout paint;
+}
+
+.swui-glitch.active {
+  animation: swui-glitch-anim 0.2s steps(2, jump-none) infinite;
+}
+
+@keyframes swui-glitch-anim {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  25% {
+    transform: translate3d(-2px, 1px, 0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate3d(2px, -1px, 0);
+    opacity: 1;
+  }
+  75% {
+    transform: translate3d(-1px, -1px, 0);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+

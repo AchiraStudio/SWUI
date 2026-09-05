@@ -116,10 +116,14 @@ export interface SwuiRuntimeData {
   dt: number;
   time?: number;
   frameIndex?: number;
+  stateVersion?: number;
   cefFps: number;
   width: number;
   height: number;
+  timeDilation?: number;
+  paused?: boolean;
 }
+
 
 
 
@@ -306,6 +310,9 @@ function _notifyBatch(batch: Record<string, unknown>, runtime?: SwuiRuntimeData)
 
   if (runtime) {
     if (rt) rt._runtime = runtime;
+    if (typeof runtime.time === 'number') {
+      updateClock(runtime.time, runtime.timeDilation ?? 1.0, runtime.paused ?? false);
+    }
     if (_tickSubs.length > 0) {
       for (let i = 0; i < _tickSubs.length; ++i) {
         try {
@@ -318,6 +325,7 @@ function _notifyBatch(batch: Record<string, unknown>, runtime?: SwuiRuntimeData)
     window.dispatchEvent(new CustomEvent('swui:tick', { detail: runtime }));
   }
 }
+
 
 function _patch(): void {
   if (_patched) return;

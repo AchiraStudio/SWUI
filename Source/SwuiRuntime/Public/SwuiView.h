@@ -23,6 +23,7 @@ class AActor;
 class UTexture2D;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class FSwuiGpuSharedTextureHelper;
 
 UCLASS(ClassGroup=Swui, Blueprintable)
 class SWUIRUNTIME_API USwuiView : public UObject, public ISwuiRenderTarget, public ISwuiAcceleratedRenderTarget
@@ -265,6 +266,7 @@ private:
 
 
 	ESwuiRenderingMode ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
+	TSharedPtr<FSwuiGpuSharedTextureHelper> GpuHelper;
 
 	// ---- Pointer input ----
 
@@ -285,7 +287,8 @@ private:
 
 	// ---- Browser frame pacing ----
 
-	int32 WindowlessFrameRate = 300;
+	int32 WindowlessFrameRate = 60;
+
 
 	bool bExternalBeginFrameActive = false;
 

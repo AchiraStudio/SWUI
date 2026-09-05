@@ -20,7 +20,9 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "GameFramework/WorldSettings.h"
 #include "HAL/IConsoleManager.h"
+
 #include "UObject/UnrealType.h"
 #include "UObject/Field.h"
 #include "UObject/PropertyIterator.h"

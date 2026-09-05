@@ -204,11 +204,11 @@ struct FSwuiInstanceSettings
 	ESwuiRenderingMode RenderingMode = ESwuiRenderingMode::Auto;
 
 	bool  bIsHUD                          = false;
-	bool  bUseUEFrameLockedBrowser        = true;
-	bool  bUseExternalBeginFrames         = true;
+	bool  bUseUEFrameLockedBrowser        = false;
+	bool  bUseExternalBeginFrames         = false;
 	bool  bSendExternalBeginFrameFromTick = true;
 	bool  bFlushHudStateBeforeBrowserFrame = true;
-	int32 MaxBrowserFramesPerSecond       = 60;
+	int32 MaxBrowserFramesPerSecond       = 120;
 
 	int32 OverrideFrameRate        = 0;    // 0 = use project setting / engine MaxFPS
 	float OverrideBandOvercopyRatio = 0.f; // 0 = use project setting (1.25)

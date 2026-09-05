@@ -179,15 +179,15 @@ TAutoConsoleVariable<int32> CVarSwuiVerbosePaint(
 // Performance & Synchronization
 TAutoConsoleVariable<int32> CVarSwuiGpuAccelerated(
 	TEXT("swui.perf.GpuAccelerated"),
-	0,
-	TEXT("Override GPU accelerated rendering. -1 = use instance setting, 0 = force CPU (default), 1 = force GPU."),
+	-1,
+	TEXT("Override GPU accelerated rendering. -1 = use instance setting (Auto/GPU default), 0 = force CPU, 1 = force GPU."),
 	ECVF_Default);
 
 
 TAutoConsoleVariable<int32> CVarSwuiFramePacing(
 	TEXT("swui.perf.FramePacing"),
-	-1,
-	TEXT("Override frame pacing mode. -1 = use instance setting, 0 = decoupled, 1 = lockstep."),
+	0,
+	TEXT("Override frame pacing mode. -1 = use instance setting, 0 = decoupled (autonomous CEF compositor, default), 1 = lockstep."),
 	ECVF_Default);
 
 TAutoConsoleVariable<int32> CVarSwuiBatchStateSync(
