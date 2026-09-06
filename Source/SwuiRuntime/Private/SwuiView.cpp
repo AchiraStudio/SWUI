@@ -6,6 +6,7 @@
 #include "SwuiManager.h"
 #include "SwuiNavigation.h"
 #include "SwuiGpuSharedTextureHelper.h"
+#include "SwuiProfiler.h"
 
 #include "Components/ActorComponent.h"
 #include "GameFramework/Actor.h"
@@ -369,6 +370,12 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		UE_LOG(LogSwuiRuntime, Log, TEXT("USwuiView Initialized"));
 	}
 
+	Scheduler.Initialize(
+		InstanceSettings.FrameRateMode,
+		TargetFPS,
+		InstanceSettings.bEnableSleep,
+		InstanceSettings.InactivitySleepDelay);
+
 	ResetTexture();
 
 	if (!DefaultURL.IsEmpty())
@@ -377,8 +384,30 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 	}
 }
 
+void USwuiView::SetFrameRateMode(ESwuiFrameRateMode InMode, int32 InCustomFps)
+{
+	Scheduler.SetFrameRateMode(InMode, InCustomFps);
+}
+
+ESwuiFrameRateMode USwuiView::GetFrameRateMode() const
+{
+	return Scheduler.GetFrameRateMode();
+}
+
+void USwuiView::WakeUI()
+{
+	Scheduler.Wake();
+}
+
+void USwuiView::SleepUI()
+{
+	Scheduler.Sleep();
+}
+
 void USwuiView::LoadURL(const FString& URI)
 {
+	Scheduler.NotifyActivity(true);
+
 	if (!CefData || !CefData->Browser)
 	{
 		UE_LOG(LogSwuiRuntime, Warning, TEXT("[SWUI LoadURL] skipped — browser not ready URI=%s"), *URI);
@@ -426,6 +455,8 @@ void USwuiView::LoadURL(const FString& URI)
 
 void USwuiView::ExecuteJavaScript(const FString& Script)
 {
+	Scheduler.NotifyActivity(false);
+
 	if (CefData && CefData->Browser)
 	{
 		CefString CodeStr = *Script;
@@ -439,6 +470,8 @@ void USwuiView::QueuePendingScript(const FString& InScript)
 	{
 		return;
 	}
+
+	Scheduler.NotifyActivity(true);
 
 	if (!PendingScript.IsEmpty())
 	{
@@ -513,6 +546,30 @@ bool USwuiView::HandleIncomingMessage(const FString& MessageJson)
 		MessageObject->TryGetBoolField(TEXT("focused"), bFocused);
 		SetTextInputFocused(bFocused);
 		UE_LOG(LogSwuiRuntime, Log, TEXT("[SWUI Focus] textInputFocused=%s"), bFocused ? TEXT("true") : TEXT("false"));
+		return true;
+	}
+
+	if (MessageType == TEXT("swui:activity") || MessageType == TEXT("swui:animation"))
+	{
+		bool bActive = true;
+		MessageObject->TryGetBoolField(TEXT("active"), bActive);
+		FString ActivityKey = TEXT("generic");
+		MessageObject->TryGetStringField(TEXT("key"), ActivityKey);
+
+		Scheduler.NotifyActivity(bActive);
+		if (bActive)
+		{
+			Scheduler.Wake();
+		}
+		UE_LOG(LogSwuiRuntime, Verbose, TEXT("[SWUI Activity] key=%s active=%s"), *ActivityKey, bActive ? TEXT("true") : TEXT("false"));
+		return true;
+	}
+
+	if (MessageType == TEXT("swui:longtask"))
+	{
+		double DurationMs = 0.0;
+		MessageObject->TryGetNumberField(TEXT("duration"), DurationMs);
+		UE_LOG(LogSwuiRuntime, Warning, TEXT("[SWUI JS LongTask] CEF script/layout task took %.2f ms (non-blocking for UE)"), DurationMs);
 		return true;
 	}
 
@@ -658,6 +715,21 @@ void USwuiView::NotifyHudStateFlushed()
 	++Stat_HudStateFlushes;
 }
 
+void USwuiView::NotifyActivity(bool bHighPriority)
+{
+	Scheduler.NotifyActivity(bHighPriority);
+	Scheduler.Wake();
+}
+
+void USwuiView::Wake()
+{
+	Scheduler.Wake();
+}
+
+void USwuiView::Sleep()
+{
+	Scheduler.Sleep();
+}
 
 void USwuiView::NotifySubsystemTick()
 {
@@ -679,6 +751,7 @@ bool USwuiView::HasFreshOnPaintDataPending() const
 
 void USwuiView::RequestBrowserVisualRefresh(bool bForceFrame)
 {
+	Scheduler.Wake();
 	InvalidateBrowserView();
 
 	if (bForceFrame)
@@ -755,7 +828,7 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 				new FSwuiFlushAndBeginFrameTask(
 					CefData->Browser,
 					StdScript,
-					/*bInvalidateView=*/true,
+					/*bInvalidateView=*/false,
 					/*bSendBeginFrame=*/false));
 		}
 
@@ -774,7 +847,7 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 				new FSwuiFlushAndBeginFrameTask(
 					CefData->Browser,
 					StdScript,
-					/*bInvalidateView=*/true,
+					/*bInvalidateView=*/false,
 					/*bSendBeginFrame=*/false));
 		}
 
@@ -920,6 +993,8 @@ void USwuiView::OnPaint(
 	int32 InWidth,
 	int32 InHeight)
 {
+	SWUI_PROFILE_SCOPE(CefPaint);
+
 	GetOrCreateTexture(InWidth, InHeight);
 
 	// Texture is null on the very first frame, or briefly mid-resize while
@@ -975,9 +1050,26 @@ void USwuiView::OnPaint(
 		CefPaintsAtomic.fetch_add(1, std::memory_order_relaxed);
 	}
 
+	// Record dirty vs full surface pixels for profiler telemetry
+	int64 TotalDirtyPx = 0;
+	if (Regions && RegionCount > 0)
+	{
+		for (int32 i = 0; i < RegionCount; ++i)
+		{
+			TotalDirtyPx += static_cast<int64>(Regions[i].Width) * static_cast<int64>(Regions[i].Height);
+		}
+	}
+	else
+	{
+		TotalDirtyPx = static_cast<int64>(InWidth) * static_cast<int64>(InHeight);
+	}
+	const int64 FullSurfacePx = static_cast<int64>(InWidth) * static_cast<int64>(InHeight);
+	FSwuiProfiler::RecordPixels(TotalDirtyPx, FullSurfacePx);
+
 	// Stage the frame: either ROI direct path or full-surface pool.
 	if (bCanCopy)
 	{
+		SWUI_PROFILE_SCOPE(CpuCopy);
 		const TArray<FIntRect> RoiRects = BuildActiveHudRoiRects();
 		if (!RoiRects.IsEmpty())
 		{
@@ -986,8 +1078,8 @@ void USwuiView::OnPaint(
 		}
 		else
 		{
-			// Full-surface mode: copy full CEF buffer into pool.
-			FullSurfaceRenderer.StagePaint(Buffer, InWidth, InHeight, PaintNow);
+			// Full-surface mode: copy full CEF buffer into pool with dirty regions.
+			FullSurfaceRenderer.StagePaint(Buffer, Regions, RegionCount, InWidth, InHeight, PaintNow);
 		}
 	}
 
@@ -999,6 +1091,8 @@ void USwuiView::OnAcceleratedPaint(
 	int32 InWidth,
 	int32 InHeight)
 {
+	SWUI_PROFILE_SCOPE(CefPaint);
+
 	GetOrCreateTexture(InWidth, InHeight);
 
 	if (!SharedHandle)
@@ -1054,8 +1148,47 @@ void USwuiView::OnAcceleratedPaint(
 	FRHITexture* DestRHI = TexRes->TextureRHI.GetReference();
 	if (DestRHI && GpuHelper.IsValid())
 	{
+		const int64 FullSurfacePx = static_cast<int64>(InWidth) * static_cast<int64>(InHeight);
+		FSwuiProfiler::RecordPixels(FullSurfacePx, FullSurfacePx);
+
+		SWUI_PROFILE_SCOPE(GpuUpload);
 		if (GpuHelper->BlitSharedTexture(SharedHandle, DestRHI, InWidth, InHeight))
 		{
+			// Completed blit into RenderingBufferIndex.
+			// Atomically publish into PendingBufferIndex (bounded triple buffer / latest-frame policy).
+			const int32 CompletedIndex = RenderingBufferIndex;
+			const int32 OldPending = PendingBufferIndex.exchange(CompletedIndex, std::memory_order_acq_rel);
+
+			if (OldPending != -1)
+			{
+				// An unconsumed frame in PendingBufferIndex was superseded by this newer frame.
+				// Stale frame is dropped immediately without waiting or blocking Game Thread.
+				FSwuiProfiler::RecordDroppedFrame();
+				if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
+				{
+					Subsystem->GetTelemetryMutable().DroppedFrames++;
+				}
+				// Immediately reuse the superseded buffer for the next CEF blit
+				RenderingBufferIndex = OldPending;
+			}
+			else
+			{
+				// Acquire next available spare buffer from FreeBufferIndex
+				const int32 NextRendering = FreeBufferIndex.exchange(-1, std::memory_order_acq_rel);
+				if (NextRendering != -1)
+				{
+					RenderingBufferIndex = NextRendering;
+				}
+			}
+
+			// Point the CEF blit target resource to the newly acquired rendering buffer
+			if (RenderingBufferIndex >= 0 && RenderingBufferIndex < 3 && GpuBufferTextures[RenderingBufferIndex])
+			{
+				BlitTargetResource.store(
+					static_cast<FTextureResource*>(GpuBufferTextures[RenderingBufferIndex]->GetResource()),
+					std::memory_order_release);
+			}
+
 			BlitGeneration.fetch_add(1, std::memory_order_release);
 		}
 	}
@@ -1085,24 +1218,25 @@ void USwuiView::TickDeferredUpload()
 	// tick and (re)create the texture here, safely on the game thread.
 	ApplyPendingTextureResize();
 
-	// In GPU accelerated mode: check if a fresh blit has completed and swap front/back buffers.
+	// In GPU accelerated mode: consume latest completed frame via bounded triple-buffering.
 	if (ResolvedRenderingMode == ESwuiRenderingMode::GpuAccelerated)
 	{
-		const uint64 CurGen = BlitGeneration.load(std::memory_order_acquire);
-		if (CurGen != LastConsumedBlitGeneration && BackTexture && Texture)
+		const int32 ReadyIndex = PendingBufferIndex.exchange(-1, std::memory_order_acq_rel);
+		if (ReadyIndex >= 0 && ReadyIndex < 3 && GpuBufferTextures[ReadyIndex])
 		{
-			Swap(Texture, BackTexture);
-			LastConsumedBlitGeneration = CurGen;
+			const int32 OldDisplayed = DisplayedBufferIndex;
+			DisplayedBufferIndex = ReadyIndex;
+			Texture = GpuBufferTextures[DisplayedBufferIndex];
 
-			if (BackTexture->GetResource())
-			{
-				BlitTargetResource.store(static_cast<FTextureResource*>(BackTexture->GetResource()), std::memory_order_release);
-			}
+			// Return previous displayed buffer back to Free pool for CEF
+			FreeBufferIndex.store(OldDisplayed, std::memory_order_release);
 
 			if (MaterialInstance)
 			{
 				MaterialInstance->SetTextureParameterValue(TextureParameterName, Texture);
 			}
+
+			LastConsumedBlitGeneration = BlitGeneration.load(std::memory_order_acquire);
 
 			if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
 			{
@@ -1112,6 +1246,7 @@ void USwuiView::TickDeferredUpload()
 					const double LatencyMs = (Now - LastPaintArrivalTime) * 1000.0;
 					Subsystem->GetTelemetryMutable().LastPaintToPresentLatencyMs = LatencyMs;
 					Subsystem->GetTelemetryMutable().PaintToPresentLatency.Add(static_cast<float>(LatencyMs));
+					FSwuiProfiler::RecordPresentedFrame(static_cast<float>(LatencyMs));
 				}
 			}
 		}
@@ -1200,6 +1335,13 @@ void USwuiView::TickDeferredUpload()
 			Stat_RoiEnqueueMsSum += EnqueueMs;
 			if (EnqueueMs > Stat_RoiEnqueueMsMax)
 				Stat_RoiEnqueueMsMax = EnqueueMs;
+
+			FSwuiProfiler::RecordPixels(RoiPx, int64(Width) * Height);
+			if (LastPaintArrivalTime > 0.0)
+			{
+				const double LatencyMs = (Now - LastPaintArrivalTime) * 1000.0;
+				FSwuiProfiler::RecordPresentedFrame(static_cast<float>(LatencyMs));
+			}
 		}
 	}
 	else
@@ -1225,35 +1367,36 @@ void USwuiView::DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTic
 		: 1.0 / 60.0;
 
 	FString ScriptToSend = MoveTemp(PendingScript);
+	const bool bHasScript = !ScriptToSend.IsEmpty();
+	const bool bForce = bDebugForceEveryTick || bHasScript;
 
-	// If there are queued scripts (e.g. state sync, progress bar updates), dispatch immediately
-	// without buffering or clumping!
-	if (bDebugForceEveryTick || !ScriptToSend.IsEmpty())
+	// Dynamic frame-rate synchronization with CEF browser host (only for non-adaptive modes to prevent timer jitter)
+	if (Scheduler.GetFrameRateMode() != ESwuiFrameRateMode::Adaptive)
 	{
-		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), true);
-		LastBrowserFrameTime = Now;
-		TargetFpsForLog = WindowlessFrameRate;
-		return;
+		const int32 TargetHz = FMath::RoundToInt(Scheduler.GetEffectiveTargetFps());
+		if (TargetHz > 0 && TargetHz != WindowlessFrameRate && CefData && CefData->Browser)
+		{
+			if (CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost())
+			{
+				Host->SetWindowlessFrameRate(TargetHz);
+				WindowlessFrameRate = TargetHz;
+			}
+		}
 	}
 
-	const int32 BrowserFpsSetting = SwuiCVarInt(
-		CVarSwuiHudMaxBrowserFPS.GetValueOnGameThread(),
-		InstanceSettings.MaxBrowserFramesPerSecond);
+	TargetFpsForLog = WindowlessFrameRate > 0 ? WindowlessFrameRate : 60;
 
-	const int32 TargetHz = FMath::Clamp(
-		BrowserFpsSetting > 0 ? BrowserFpsSetting : WindowlessFrameRate,
-		1,
-		300);
+	// Evaluate scheduler tick cadence (adaptive, fixed, match game, sleep/wake)
+	const bool bFrameDue = Scheduler.Tick(Now, static_cast<float>(DeltaSeconds), bForce);
 
-	TargetFpsForLog = TargetHz;
-
-	const double MinInterval = 1.0 / static_cast<double>(TargetHz);
-	// 1.5ms tolerance margin avoids dropping frames due to minor sub-millisecond tick fluctuations
-	const double Tolerance = FMath::Min(0.0015, MinInterval * 0.15);
-
-	if (LastBrowserFrameTime <= 0.0 || (Now - LastBrowserFrameTime) >= (MinInterval - Tolerance))
+	if (bFrameDue)
 	{
-		FlushHudStateAndRequestBrowserFrame(TEXT(""), static_cast<float>(DeltaSeconds), false);
+		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), bForce);
+		LastBrowserFrameTime = Now;
+	}
+	else if (bHasScript)
+	{
+		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), true);
 		LastBrowserFrameTime = Now;
 	}
 }
@@ -1686,10 +1829,26 @@ void USwuiView::ApplyTextureResizeImmediate(int32 InWidth, int32 InHeight)
 			BackTexture->AddToRoot();
 			BackTexture->UpdateResource();
 
+			TertiaryTexture = UTexture2D::CreateTransient(InWidth, InHeight, PF_B8G8R8A8);
+			TertiaryTexture->AddToRoot();
+			TertiaryTexture->UpdateResource();
+
+			GpuBufferTextures[0] = Texture;
+			GpuBufferTextures[1] = BackTexture;
+			GpuBufferTextures[2] = TertiaryTexture;
+
+			DisplayedBufferIndex = 0;
+			RenderingBufferIndex = 1;
+			PendingBufferIndex.store(-1, std::memory_order_release);
+			FreeBufferIndex.store(2, std::memory_order_release);
+
 			BlitTargetResource.store(static_cast<FTextureResource*>(BackTexture->GetResource()), std::memory_order_release);
 		}
 		else
 		{
+			GpuBufferTextures[0] = Texture;
+			GpuBufferTextures[1] = nullptr;
+			GpuBufferTextures[2] = nullptr;
 			BlitTargetResource.store(static_cast<FTextureResource*>(Texture->GetResource()), std::memory_order_release);
 		}
 
@@ -1747,10 +1906,26 @@ void USwuiView::ResetTexture()
 		BackTexture->AddToRoot();
 		BackTexture->UpdateResource();
 
+		TertiaryTexture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
+		TertiaryTexture->AddToRoot();
+		TertiaryTexture->UpdateResource();
+
+		GpuBufferTextures[0] = Texture;
+		GpuBufferTextures[1] = BackTexture;
+		GpuBufferTextures[2] = TertiaryTexture;
+
+		DisplayedBufferIndex = 0;
+		RenderingBufferIndex = 1;
+		PendingBufferIndex.store(-1, std::memory_order_release);
+		FreeBufferIndex.store(2, std::memory_order_release);
+
 		BlitTargetResource.store(static_cast<FTextureResource*>(BackTexture->GetResource()), std::memory_order_release);
 	}
 	else
 	{
+		GpuBufferTextures[0] = Texture;
+		GpuBufferTextures[1] = nullptr;
+		GpuBufferTextures[2] = nullptr;
 		BlitTargetResource.store(static_cast<FTextureResource*>(Texture->GetResource()), std::memory_order_release);
 	}
 
@@ -1773,6 +1948,15 @@ void USwuiView::ResetTexture()
 void USwuiView::DestroyTexture()
 {
 	BlitTargetResource.store(nullptr, std::memory_order_release);
+	PendingBufferIndex.store(-1, std::memory_order_release);
+	FreeBufferIndex.store(-1, std::memory_order_release);
+	DisplayedBufferIndex = 0;
+	RenderingBufferIndex = 1;
+
+	for (int32 i = 0; i < 3; ++i)
+	{
+		GpuBufferTextures[i] = nullptr;
+	}
 
 	if (Texture)
 	{
@@ -1786,6 +1970,13 @@ void USwuiView::DestroyTexture()
 		BackTexture->RemoveFromRoot();
 		BackTexture->MarkAsGarbage();
 		BackTexture = nullptr;
+	}
+
+	if (TertiaryTexture)
+	{
+		TertiaryTexture->RemoveFromRoot();
+		TertiaryTexture->MarkAsGarbage();
+		TertiaryTexture = nullptr;
 	}
 }
 
@@ -1940,6 +2131,8 @@ bool USwuiView::ForwardMouseMoveToBrowser(const FVector2D& ScreenPosition)
 		return false;
 	}
 
+	Scheduler.NotifyActivity(true);
+
 	int32 BX = 0;
 	int32 BY = 0;
 	if (!ScreenToBrowserPixel(ScreenPosition, BX, BY))
@@ -1955,6 +2148,7 @@ bool USwuiView::ForwardMouseMoveToBrowser(const FVector2D& ScreenPosition)
 			Subsystem->GetTelemetryMutable().InputEventsCoalesced++;
 		}
 	}
+	FSwuiProfiler::RecordInputEvent(bPendingCoalescedMouseMove);
 
 	bPendingCoalescedMouseMove = true;
 	CoalescedMouseMoveBX = BX;
@@ -2009,6 +2203,8 @@ bool USwuiView::ForwardMouseButtonToBrowser(
 		return false;
 	}
 
+	Scheduler.NotifyActivity(true);
+
 	// Flush any pending coalesced move/wheel prior to mouse click
 	FlushCoalescedInput();
 
@@ -2038,6 +2234,7 @@ bool USwuiView::ForwardMouseButtonToBrowser(
 	{
 		Subsystem->GetTelemetryMutable().InputEventsReceived++;
 	}
+	FSwuiProfiler::RecordInputEvent(false);
 
 	const TCHAR* Action = bMouseUp ? TEXT("Up") : TEXT("Down");
 
@@ -2067,6 +2264,8 @@ bool USwuiView::ForwardMouseWheelToBrowser(
 		return false;
 	}
 
+	Scheduler.NotifyActivity(true);
+
 	int32 BX = 0;
 	int32 BY = 0;
 	if (!ScreenToBrowserPixel(ScreenPosition, BX, BY))
@@ -2078,6 +2277,7 @@ bool USwuiView::ForwardMouseWheelToBrowser(
 	{
 		Subsystem->GetTelemetryMutable().InputEventsReceived++;
 	}
+	FSwuiProfiler::RecordInputEvent(true);
 
 	PendingAccumulatedWheelDeltaX += DeltaX;
 	PendingAccumulatedWheelDeltaY += DeltaY;
@@ -2118,6 +2318,8 @@ bool USwuiView::ForwardMouseMoveAtPixel(int32 BX, int32 BY)
 		return false;
 	}
 
+	Scheduler.NotifyActivity(true);
+
 	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
 	{
 		Subsystem->GetTelemetryMutable().InputEventsReceived++;
@@ -2149,6 +2351,8 @@ bool USwuiView::ForwardMouseButtonAtPixel(int32 BX, int32 BY, FKey Button, bool 
 	{
 		return false;
 	}
+
+	Scheduler.NotifyActivity(true);
 
 	// Flush any pending coalesced move/wheel prior to mouse click
 	FlushCoalescedInput();
@@ -2195,6 +2399,8 @@ bool USwuiView::ForwardMouseWheelAtPixel(int32 BX, int32 BY, float DeltaX, float
 		return false;
 	}
 
+	Scheduler.NotifyActivity(true);
+
 	if (USwuiSubsystem* Subsystem = GetTypedOuter<USwuiSubsystem>())
 	{
 		Subsystem->GetTelemetryMutable().InputEventsReceived++;
@@ -2210,6 +2416,11 @@ bool USwuiView::ForwardMouseWheelAtPixel(int32 BX, int32 BY, float DeltaX, float
 
 void USwuiView::SetBrowserInputFocus(bool bFocused)
 {
+	if (bFocused)
+	{
+		Scheduler.Wake();
+	}
+
 	if (!CefData || !CefData->Browser)
 	{
 		return;
@@ -2240,6 +2451,8 @@ void USwuiView::SetBrowserInputFocus(bool bFocused)
 // Ctrl+A/C/V shortcuts). When false, keys are treated as UI navigation.
 bool USwuiView::ForwardKeyEventToBrowser(const FKeyEvent& KeyEvent, bool bKeyUp)
 {
+	Scheduler.NotifyActivity(true);
+
 	if (!CefData || !CefData->Browser) return false;
 	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
 	if (!Host) return false;
@@ -2281,6 +2494,8 @@ bool USwuiView::ForwardKeyEventToBrowser(const FKeyEvent& KeyEvent, bool bKeyUp)
 // by reading FKeyEvent::GetCharacter().
 bool USwuiView::ForwardCharToBrowser(TCHAR Char, const FModifierKeysState& Modifiers)
 {
+	Scheduler.NotifyActivity(true);
+
 	if (!CefData || !CefData->Browser) return false;
 	CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
 	if (!Host) return false;

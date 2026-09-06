@@ -11,6 +11,7 @@ public:
 	SwuiManager();
 
 	static void DoSwuiMessageLoop();
+	static bool DoSwuiMessageLoopBudgeted(double MaxSeconds);
 	static CefSettings Settings;
 	static CefMainArgs MainArgs;
 	static bool CPURenderSettings;

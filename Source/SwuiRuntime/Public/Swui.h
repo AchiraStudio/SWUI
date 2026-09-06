@@ -181,9 +181,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|Performance|HUD Frame Lock", meta=(EditCondition="bIsHUD && bUseUEFrameLockedBrowser"))
 	bool bFlushHudStateBeforeBrowserFrame = true;
 
+	/** Frame rate cadence mode for the UI scheduler (MatchGame, Fixed60, Adaptive, etc.). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|Performance")
+	ESwuiFrameRateMode FrameRateMode = ESwuiFrameRateMode::MatchGame;
+
 	/** Browser frame cap for HUD mode. If UE runs above this, frames are paced to this cap. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|Performance", meta=(EditCondition="bIsHUD", ClampMin="1", ClampMax="300"))
-	int32 MaxBrowserFramesPerSecond = 60;
+	int32 MaxBrowserFramesPerSecond = 120;
 
 	// ---- Performance | Upload Strategy ------------------------------------
 

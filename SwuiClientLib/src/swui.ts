@@ -99,7 +99,11 @@ type SwuiNativeMessage = {
   tag?: string;
   event?: string;
   id?: string;
+  key?: string;
+  active?: boolean;
+  duration?: number;
   source?: 'js';
+  [key: string]: unknown;
 };
 interface SwuiChromeWebview {
   postMessage: (message: unknown) => void;
@@ -834,6 +838,52 @@ export const timeline = {
   },
 };
 
+// ── Activity & Animation Hints (Phase 13) ──────────────────────────────────
+
+function setActivity(key: string, active: boolean): void {
+  postMessage({
+    type: 'swui:activity',
+    key,
+    active,
+  });
+}
+
+const animation = {
+  begin(id: string = 'generic'): void {
+    postMessage({
+      type: 'swui:animation',
+      key: id,
+      active: true,
+    });
+  },
+  end(id: string = 'generic'): void {
+    postMessage({
+      type: 'swui:animation',
+      key: id,
+      active: false,
+    });
+  },
+};
+
+// ── Long Task Detection (Phase 13) ──────────────────────────────────────────
+if (typeof window !== 'undefined' && typeof PerformanceObserver !== 'undefined') {
+  try {
+    const _longTaskObserver = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.duration > 16) {
+          postMessage({
+            type: 'swui:longtask',
+            duration: entry.duration,
+          });
+        }
+      }
+    });
+    _longTaskObserver.observe({ entryTypes: ['longtask'] });
+  } catch {
+    // Unsupported or restricted environment, ignore safely
+  }
+}
+
 // ── Export ──────────────────────────────────────────────────────────────────
 
 const Swui = {
@@ -843,6 +893,9 @@ const Swui = {
   gameTimeNow, updateClock,
   // Timeline (Phase 2)
   timeline,
+  // Activity & Animation hints (Phase 13)
+  setActivity,
+  animation,
   // Animation math helpers
   lerp, damp, createSpring,
   // Navigation — subscribe
@@ -857,7 +910,8 @@ const Swui = {
 
 export { SwuiHoldProgress } from './SwuiHoldProgress';
 export default Swui;
-export { postMessage, emitNavigationEvent, onBatch, onTick, updateState, query, lerp, damp, createSpring };
+export { postMessage, emitNavigationEvent, onBatch, onTick, updateState, query, lerp, damp, createSpring, setActivity, animation };
+
 
 
 

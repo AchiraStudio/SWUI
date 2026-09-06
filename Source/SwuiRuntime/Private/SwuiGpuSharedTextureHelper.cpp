@@ -18,9 +18,9 @@ bool FSwuiGpuSharedTextureHelper::IsGpuAccelerationSupported()
 		return false;
 	}
 	const TCHAR* RHIName = GDynamicRHI->GetName();
-	// CEF allocates shared textures natively on D3D11. Only native D3D11 RHI can directly
-	// share texture interfaces without cross-API residency page faults.
-	// On D3D12, SWUI runs on the high-refresh 120 FPS CPU renderer with zero crash risk.
+	// CEF windowless rendering allocates shared surfaces natively on Direct3D 11 (ANGLE/DirectComposition).
+	// Only native D3D11 RHI can directly share texture interfaces without cross-API residency page faults.
+	// On D3D12, SWUI automatically runs on the high-refresh 120 FPS CPU renderer with zero crash risk.
 	if (FCString::Strcmp(RHIName, TEXT("D3D11")) == 0)
 	{
 		return true;
@@ -88,11 +88,7 @@ bool FSwuiGpuSharedTextureHelper::BlitSharedTexture(void* SharedHandle, FRHIText
 
 #if PLATFORM_WINDOWS
 	const TCHAR* RHIName = GDynamicRHI->GetName();
-	if (FCString::Strcmp(RHIName, TEXT("D3D12")) == 0)
-	{
-		return BlitD3D12(SharedHandle, DestRHI, Width, Height);
-	}
-	else if (FCString::Strcmp(RHIName, TEXT("D3D11")) == 0)
+	if (FCString::Strcmp(RHIName, TEXT("D3D11")) == 0)
 	{
 		return BlitD3D11(SharedHandle, DestRHI, Width, Height);
 	}
@@ -164,126 +160,10 @@ bool FSwuiGpuSharedTextureHelper::BlitD3D11(void* SharedHandle, FRHITexture* Des
 
 bool FSwuiGpuSharedTextureHelper::BlitD3D12(void* SharedHandle, FRHITexture* DestRHI, int32 Width, int32 Height)
 {
-	ID3D12Device* D3D12Device = static_cast<ID3D12Device*>(GDynamicRHI->RHIGetNativeDevice());
-	ID3D12CommandQueue* CommandQueue = static_cast<ID3D12CommandQueue*>(GDynamicRHI->RHIGetNativeGraphicsQueue());
-
-	if (!D3D12Device || !CommandQueue)
-	{
-		return false;
-	}
-
-	FScopeLock Lock(&BlitMutex);
-
-	if (SharedHandle != LastSharedHandle || !CachedD3D12SharedRes)
-	{
-		if (CachedD3D12SharedRes)
-		{
-			CachedD3D12SharedRes->Release();
-			CachedD3D12SharedRes = nullptr;
-		}
-
-		HRESULT hr = D3D12Device->OpenSharedHandle(static_cast<HANDLE>(SharedHandle), IID_PPV_ARGS(&CachedD3D12SharedRes));
-		if (FAILED(hr) || !CachedD3D12SharedRes)
-		{
-			UE_LOG(LogSwuiRuntime, Warning, TEXT("[SWUI GPU] Failed to open D3D12 shared handle 0x%p (hr=0x%08X)"), SharedHandle, hr);
-			return false;
-		}
-
-		LastSharedHandle = SharedHandle;
-	}
-
-	ID3D12Resource* NativeDst = static_cast<ID3D12Resource*>(DestRHI->GetNativeResource());
-	if (!NativeDst)
-	{
-		return false;
-	}
-
-	// Lazy initialize command allocator and list
-	if (!D3D12CommandAllocator)
-	{
-		HRESULT hr = D3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&D3D12CommandAllocator));
-		if (FAILED(hr))
-		{
-			UE_LOG(LogSwuiRuntime, Error, TEXT("[SWUI GPU] CreateCommandAllocator failed (hr=0x%08X)"), hr);
-			return false;
-		}
-	}
-
-	if (!D3D12CommandList)
-	{
-		HRESULT hr = D3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12CommandAllocator, nullptr, IID_PPV_ARGS(&D3D12CommandList));
-		if (FAILED(hr))
-		{
-			UE_LOG(LogSwuiRuntime, Error, TEXT("[SWUI GPU] CreateCommandList failed (hr=0x%08X)"), hr);
-			return false;
-		}
-		D3D12CommandList->Close();
-	}
-
-	if (!D3D12Fence)
-	{
-		HRESULT hr = D3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&D3D12Fence));
-		if (SUCCEEDED(hr))
-		{
-			D3D12FenceEvent = CreateEvent(nullptr, false, false, nullptr);
-		}
-	}
-
-	// Wait for previous copy if still in-flight
-	if (D3D12Fence && D3D12FenceValue > 0)
-	{
-		if (D3D12Fence->GetCompletedValue() < D3D12FenceValue && D3D12FenceEvent)
-		{
-			D3D12Fence->SetEventOnCompletion(D3D12FenceValue, D3D12FenceEvent);
-			WaitForSingleObject(D3D12FenceEvent, 50);
-		}
-	}
-
-	D3D12CommandAllocator->Reset();
-	D3D12CommandList->Reset(D3D12CommandAllocator, nullptr);
-
-	// Transition barriers
-	D3D12_RESOURCE_BARRIER Barriers[2] = {};
-
-	// Shared texture from CEF starts in COMMON state, transition to COPY_SOURCE
-	Barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	Barriers[0].Transition.pResource = CachedD3D12SharedRes;
-	Barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-	Barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-	Barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-	// Destination texture is sampled by material, transition from PIXEL_SHADER_RESOURCE to COPY_DEST
-	Barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	Barriers[1].Transition.pResource = NativeDst;
-	Barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-	Barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-	Barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-	D3D12CommandList->ResourceBarrier(2, Barriers);
-
-	D3D12CommandList->CopyResource(NativeDst, CachedD3D12SharedRes);
-
-	// Transition back
-	Barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-	Barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
-
-	Barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-	Barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-
-	D3D12CommandList->ResourceBarrier(2, Barriers);
-
-	D3D12CommandList->Close();
-
-	ID3D12CommandList* CmdLists[] = { D3D12CommandList };
-	CommandQueue->ExecuteCommandLists(1, CmdLists);
-
-	if (D3D12Fence)
-	{
-		++D3D12FenceValue;
-		CommandQueue->Signal(D3D12Fence, D3D12FenceValue);
-	}
-
-	return true;
+	// Cross-API D3D11-to-D3D12 shared handle blitting without 11on12 device interop causes GPU MMU page faults
+	// when conflicting with Unreal Engine's internal D3D12 RHI resource state tracker.
+	// On D3D12, SWUI safely routes through the CPU compatible renderer.
+	return false;
 }
 
 #endif // PLATFORM_WINDOWS

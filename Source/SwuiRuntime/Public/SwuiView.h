@@ -10,6 +10,7 @@
 #include "RenderHandler.h"
 #include "SwuiTypes.h"
 #include "SwuiFullSurfaceCpuRenderer.h"
+#include "SwuiScheduler.h"
 
 #include "SwuiView.generated.h"
 
@@ -58,6 +59,15 @@ public:
 	virtual void BeginDestroy() override;
 
 	int32 GetWindowlessFrameRate() const { return WindowlessFrameRate; }
+
+	// UI Frame Scheduler & Sleep/Wake access
+	FSwuiScheduler& GetScheduler() { return Scheduler; }
+	const FSwuiScheduler& GetScheduler() const { return Scheduler; }
+
+	void SetFrameRateMode(ESwuiFrameRateMode InMode, int32 InCustomFps = 60);
+	ESwuiFrameRateMode GetFrameRateMode() const;
+	void WakeUI();
+	void SleepUI();
 
 	// Current resolved renderer path (GPU Accelerated vs CPU FullSurface).
 	ESwuiRenderingMode GetResolvedRenderingMode() const { return ResolvedRenderingMode; }
@@ -207,6 +217,18 @@ public:
 	void SetTextInputFocused(bool bFocused) { bTextInputFocused = bFocused; }
 	bool IsTextInputFocused() const { return bTextInputFocused; }
 
+	/** Notifies the UI scheduler of activity (e.g. gameplay animation or external event). */
+	UFUNCTION(BlueprintCallable, Category = "SWUI")
+	void NotifyActivity(bool bHighPriority = false);
+
+	/** Force immediate wake from sleep state. */
+	UFUNCTION(BlueprintCallable, Category = "SWUI")
+	void Wake();
+
+	/** Put UI to sleep immediately. */
+	UFUNCTION(BlueprintCallable, Category = "SWUI")
+	void Sleep();
+
 private:
 	AActor* ResolveOwningActor() const;
 
@@ -244,6 +266,20 @@ private:
 
 	UPROPERTY()
 	UTexture2D* BackTexture = nullptr;   // "back" — blit target for the next GPU frame
+
+	UPROPERTY()
+	UTexture2D* TertiaryTexture = nullptr; // 3rd buffer for bounded triple buffering
+
+	// Bounded triple buffering state for GPU accelerated path:
+	// Index 0: Displayed (Game Thread presentation)
+	// Index 1: Rendering (CEF accelerated blit target)
+	// Index 2: Spare/Pending
+	UTexture2D* GpuBufferTextures[3] = { nullptr, nullptr, nullptr };
+
+	int32 DisplayedBufferIndex = 0;
+	int32 RenderingBufferIndex = 1;
+	std::atomic<int32> PendingBufferIndex{ -1 };
+	std::atomic<int32> FreeBufferIndex{ 2 };
 
 	// Raw resource pointer the CEF thread reads to pick its blit target.
 	// Never a UObject — safe to touch off the game thread. Written only by
@@ -284,6 +320,9 @@ private:
 	int32 CoalescedWheelBY = 0;
 
 	void FlushCoalescedInput();
+
+	// ---- UI Frame Scheduler & Sleep/Wake ----
+	FSwuiScheduler Scheduler;
 
 	// ---- Browser frame pacing ----
 

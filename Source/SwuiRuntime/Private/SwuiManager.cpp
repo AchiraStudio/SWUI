@@ -84,6 +84,12 @@ void SwuiManager::DoSwuiMessageLoop()
 	CefDoMessageLoopWork();
 }
 
+bool SwuiManager::DoSwuiMessageLoopBudgeted(double MaxSeconds)
+{
+	CefDoMessageLoopWork();
+	return true;
+}
+
 CefRefPtr<CefRenderProcessHandler> SwuiManager::GetRenderProcessHandler()
 {
 	return this;

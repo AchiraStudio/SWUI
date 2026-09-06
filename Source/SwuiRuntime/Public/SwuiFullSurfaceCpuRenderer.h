@@ -8,7 +8,7 @@
 
 struct FUpdateTextureRegion2D;
 
-enum { ESwuiFullSurfacePoolSize = 4 };
+enum { ESwuiFullSurfacePoolSize = 6 };
 
 struct FSwuiFullSurfaceFrame
 {
@@ -17,12 +17,16 @@ struct FSwuiFullSurfaceFrame
 	int32 Height = 0;
 	uint64 Generation = 0;
 	double PaintTime  = 0.0;
+	TArray<FUpdateTextureRegion2D> DirtyRegions;
+	bool bIsFullSurfaceDirty = true;
 
 	void Allocate(int32 W, int32 H)
 	{
 		Width  = W;
 		Height = H;
 		Pixels.SetNumUninitialized(W * H * 4);
+		DirtyRegions.Reset();
+		bIsFullSurfaceDirty = true;
 	}
 };
 
@@ -55,7 +59,19 @@ public:
 	void InitializePool(int32 Width, int32 Height);
 	void HandleTextureSizeChanged(int32 NewWidth, int32 NewHeight);
 
-	void StagePaint(const void* Buffer, int32 InWidth, int32 InHeight, double PaintArrivalTime);
+	void StagePaint(
+		const void* Buffer,
+		const FUpdateTextureRegion2D* InRegions,
+		int32 InRegionCount,
+		int32 InWidth,
+		int32 InHeight,
+		double PaintArrivalTime);
+
+	void StagePaint(const void* Buffer, int32 InWidth, int32 InHeight, double PaintArrivalTime)
+	{
+		StagePaint(Buffer, nullptr, 0, InWidth, InHeight, PaintArrivalTime);
+	}
+
 	void TickUpload(FTextureResource* InTextureResource, double Now, bool bForceEveryTick);
 
 	void Reset();

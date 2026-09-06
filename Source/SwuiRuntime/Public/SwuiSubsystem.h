@@ -54,6 +54,7 @@ struct FSwuiObservedProperty
 	FString                 NamespacedKey; // "player.Health"
 	FName                   PropertyName;  // "Health"
 	FProperty*              CachedProp;    // resolved once at Observe time
+	ESwuiUpdatePriority     Priority = ESwuiUpdatePriority::Normal;
 };
 
 struct FSwuiObservedDelegate
@@ -177,7 +178,7 @@ public:
 
 	// ---- Public API ----
 
-	void ObserveProperty(UObject* Source, const FString& Namespace, const FName& PropertyName);
+	void ObserveProperty(UObject* Source, const FString& Namespace, const FName& PropertyName, ESwuiUpdatePriority Priority = ESwuiUpdatePriority::Normal);
 	void ObserveDelegate(UObject* Source, const FString& Namespace, const FName& DelegateName);
 
 	UFUNCTION(BlueprintCallable, Category="SimpleWebUI", meta=(DefaultToSelf="Source"))
@@ -308,6 +309,11 @@ public:
 	ESwuiLowLatencyFramePacingMode LastAppliedFramePacingMode = ESwuiLowLatencyFramePacingMode::Disabled;
 
 	bool bFocusScriptInjected = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|StateSync")
+	ESwuiStateUpdatePolicy StateUpdatePolicy = ESwuiStateUpdatePolicy::OnChange;
+
+	double LastStateFlushTime = 0.0;
 
 	// ---- Telemetry & Diagnostics (SWUI 1.5 Phase 0) ----
 	const FSwuiTelemetry& GetTelemetry() const { return Telemetry; }

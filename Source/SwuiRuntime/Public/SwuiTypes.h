@@ -21,9 +21,52 @@
 UENUM(BlueprintType)
 enum class ESwuiRenderingMode : uint8
 {
-	Auto            UMETA(DisplayName = "Auto"),
-	GpuAccelerated  UMETA(DisplayName = "GPU Accelerated"),
-	CpuCompatible   UMETA(DisplayName = "CPU Compatible")
+	Auto            UMETA(DisplayName = "Automatic"),
+	GpuAccelerated  UMETA(DisplayName = "GPU Shared Texture"),
+	CpuDirtyRegions UMETA(DisplayName = "CPU Dirty Regions"),
+	CpuCompatible   UMETA(DisplayName = "CPU Full Surface")
+};
+
+UENUM(BlueprintType)
+enum class ESwuiFrameRateMode : uint8
+{
+	MatchGame UMETA(DisplayName = "Match Game"),
+	Fixed15   UMETA(DisplayName = "15 Hz"),
+	Fixed30   UMETA(DisplayName = "30 Hz"),
+	Fixed60   UMETA(DisplayName = "60 Hz"),
+	Fixed90   UMETA(DisplayName = "90 Hz"),
+	Fixed120  UMETA(DisplayName = "120 Hz"),
+	Adaptive  UMETA(DisplayName = "Adaptive")
+};
+
+UENUM(BlueprintType)
+enum class ESwuiStateUpdatePolicy : uint8
+{
+	OnChange    UMETA(DisplayName = "On Change"),
+	EventDriven UMETA(DisplayName = "Event Driven"),
+	Rate15Hz    UMETA(DisplayName = "15 Hz"),
+	Rate30Hz    UMETA(DisplayName = "30 Hz"),
+	Rate60Hz    UMETA(DisplayName = "60 Hz"),
+	Rate120Hz   UMETA(DisplayName = "120 Hz"),
+	EveryFrame  UMETA(DisplayName = "Every Game Frame")
+};
+
+UENUM(BlueprintType)
+enum class ESwuiUpdatePriority : uint8
+{
+	Critical   UMETA(DisplayName = "Critical"),
+	High       UMETA(DisplayName = "High"),
+	Normal     UMETA(DisplayName = "Normal"),
+	Low        UMETA(DisplayName = "Low"),
+	Background UMETA(DisplayName = "Background")
+};
+
+UENUM(BlueprintType)
+enum class ESwuiSleepState : uint8
+{
+	Active   UMETA(DisplayName = "Active"),
+	Idle     UMETA(DisplayName = "Idle"),
+	Sleeping UMETA(DisplayName = "Sleeping")
 };
 
 UENUM(BlueprintType)
@@ -209,6 +252,12 @@ struct FSwuiInstanceSettings
 	bool  bSendExternalBeginFrameFromTick = true;
 	bool  bFlushHudStateBeforeBrowserFrame = true;
 	int32 MaxBrowserFramesPerSecond       = 120;
+
+	// UI Frame Scheduler & Sleep/Wake settings
+	ESwuiFrameRateMode FrameRateMode = ESwuiFrameRateMode::MatchGame;
+	bool  bEnableSleep               = true;
+	float InactivitySleepDelay       = 2.0f;
+	ESwuiStateUpdatePolicy StateUpdatePolicy = ESwuiStateUpdatePolicy::OnChange;
 
 	int32 OverrideFrameRate        = 0;    // 0 = use project setting / engine MaxFPS
 	float OverrideBandOvercopyRatio = 0.f; // 0 = use project setting (1.25)

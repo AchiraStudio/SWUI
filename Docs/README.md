@@ -19,8 +19,9 @@
 | `usage/` | How a game project uses each feature (game-facing examples) |
 | `adr/` | Architecture Decision Records — why we chose certain approaches |
 
-## Architecture docs
+## Performance & Architecture docs
 
+- [CSS & Web Performance Guide](css-performance.md) — "Never sacrifice the game's frame", CSS tiers, DOM containment, profiler workflow & benchmark
 - [Navigation events](architecture/navigation-events.md) — typed JS→UE command channel, GameplayTag identity, PayloadStruct schema
 - [Delegate payloads](architecture/delegate-payloads.md) — serializing delegate params through ProcessEvent and SignatureFunction
 - [CEF input forwarding](architecture/cef-input-forwarding.md) — making HTML form controls work via SendKeyEvent

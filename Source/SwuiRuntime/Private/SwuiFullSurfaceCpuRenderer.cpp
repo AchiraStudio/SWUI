@@ -1,4 +1,5 @@
 #include "SwuiFullSurfaceCpuRenderer.h"
+#include "SwuiCVars.h"
 #include "RHICommandList.h"
 #include "RenderingThread.h"
 
@@ -81,7 +82,21 @@ void FSwuiFullSurfaceCpuRenderer::DrainReturnedQueue_Locked()
 			}
 		}
 
-		FreeFrames[FreeCount++] = ReturnedFrame;
+		// Guard against duplicate entries in FreeFrames
+		bool bAlreadyFree = false;
+		for (int32 i = 0; i < FreeCount; ++i)
+		{
+			if (FreeFrames[i] == ReturnedFrame)
+			{
+				bAlreadyFree = true;
+				break;
+			}
+		}
+
+		if (!bAlreadyFree && FreeCount < PoolSize)
+		{
+			FreeFrames[FreeCount++] = ReturnedFrame;
+		}
 	}
 }
 
@@ -91,27 +106,20 @@ FSwuiFullSurfaceFrame* FSwuiFullSurfaceCpuRenderer::AcquireFreeFrame_Locked()
 
 	if (FreeCount == 0)
 	{
-		// Steal the oldest in-flight frame.
-		if (InFlightCount > 0)
+		// If an unconsumed LatestReadyFrame exists, recycle it!
+		// It has not yet been dispatched to the Render Thread, so overwriting it is 100% thread-safe.
+		// This provides true latest-frame discard without any data race.
+		if (LatestReadyFrame)
 		{
-			int32 OldestIdx = 0;
-			uint64 MinGen = InFlightFrames[0]->Generation;
-			for (int32 i = 1; i < InFlightCount; ++i)
-			{
-				if (InFlightFrames[i]->Generation < MinGen)
-				{
-					MinGen = InFlightFrames[i]->Generation;
-					OldestIdx = i;
-				}
-			}
-
-			FSwuiFullSurfaceFrame* Frame = InFlightFrames[OldestIdx];
-			InFlightFrames[OldestIdx] = InFlightFrames[--InFlightCount];
-			Frame->Generation = 0;
-			Frame->PaintTime  = 0.0;
-			return Frame;
+			FSwuiFullSurfaceFrame* Discarded = LatestReadyFrame;
+			LatestReadyFrame = nullptr;
+			Stats.StatInterval_ReplacedReadyFrames++;
+			Discarded->Generation = 0;
+			Discarded->PaintTime  = 0.0;
+			return Discarded;
 		}
 
+		// Never steal in-flight frames currently being read by the Render Thread.
 		return nullptr;
 	}
 
@@ -125,7 +133,19 @@ void FSwuiFullSurfaceCpuRenderer::PublishLatestFrame_Locked(FSwuiFullSurfaceFram
 {
 	if (LatestReadyFrame)
 	{
-		FreeFrames[FreeCount++] = LatestReadyFrame;
+		bool bAlreadyFree = false;
+		for (int32 i = 0; i < FreeCount; ++i)
+		{
+			if (FreeFrames[i] == LatestReadyFrame)
+			{
+				bAlreadyFree = true;
+				break;
+			}
+		}
+		if (!bAlreadyFree && FreeCount < PoolSize)
+		{
+			FreeFrames[FreeCount++] = LatestReadyFrame;
+		}
 		Stats.StatInterval_ReplacedReadyFrames++;
 	}
 
@@ -154,6 +174,8 @@ FSwuiFullSurfaceFrame* FSwuiFullSurfaceCpuRenderer::ConsumeLatestFrame_Locked()
 
 void FSwuiFullSurfaceCpuRenderer::StagePaint(
 	const void* Buffer,
+	const FUpdateTextureRegion2D* InRegions,
+	int32 InRegionCount,
 	int32 InWidth,
 	int32 InHeight,
 	double PaintArrivalTime)
@@ -192,6 +214,72 @@ void FSwuiFullSurfaceCpuRenderer::StagePaint(
 	Frame->Height     = InHeight;
 	Frame->PaintTime  = PaintArrivalTime;
 
+	// Calculate dirty regions for sub-rect upload
+	int64 DirtyPixelArea = 0;
+	if (InRegions && InRegionCount > 0)
+	{
+		for (int32 i = 0; i < InRegionCount; ++i)
+		{
+			DirtyPixelArea += static_cast<int64>(InRegions[i].Width) * static_cast<int64>(InRegions[i].Height);
+		}
+	}
+
+	const int64 FullSurfaceArea = static_cast<int64>(InWidth) * static_cast<int64>(InHeight);
+	const bool bSubRectAllowed = (CVarSwuiDirtyRectUpload.GetValueOnAnyThread() != 0);
+
+	if (bSubRectAllowed && InRegions && InRegionCount > 0 && DirtyPixelArea < static_cast<int64>(FullSurfaceArea * 0.85))
+	{
+		Frame->bIsFullSurfaceDirty = false;
+		Frame->DirtyRegions.Reset();
+
+		if (InRegionCount == 1)
+		{
+			const FUpdateTextureRegion2D& InR = InRegions[0];
+			const uint32 ClampedDestX = FMath::Clamp<uint32>(InR.DestX, 0, InWidth);
+			const uint32 ClampedDestY = FMath::Clamp<uint32>(InR.DestY, 0, InHeight);
+			const uint32 ClampedW = FMath::Clamp<uint32>(InR.Width, 0, InWidth - ClampedDestX);
+			const uint32 ClampedH = FMath::Clamp<uint32>(InR.Height, 0, InHeight - ClampedDestY);
+
+			if (ClampedW > 0 && ClampedH > 0)
+			{
+				Frame->DirtyRegions.Add(FUpdateTextureRegion2D(
+					ClampedDestX, ClampedDestY,
+					ClampedDestX, ClampedDestY,
+					ClampedW, ClampedH));
+			}
+		}
+		else
+		{
+			// Merge multiple small rects into a single bounding box so the Render Thread issues only ONE UpdateTexture2D call
+			int32 MinX = InWidth, MinY = InHeight, MaxX = 0, MaxY = 0;
+			for (int32 i = 0; i < InRegionCount; ++i)
+			{
+				MinX = FMath::Clamp<int32>(FMath::Min(MinX, static_cast<int32>(InRegions[i].DestX)), 0, InWidth);
+				MinY = FMath::Clamp<int32>(FMath::Min(MinY, static_cast<int32>(InRegions[i].DestY)), 0, InHeight);
+				MaxX = FMath::Clamp<int32>(FMath::Max(MaxX, static_cast<int32>(InRegions[i].DestX + InRegions[i].Width)), 0, InWidth);
+				MaxY = FMath::Clamp<int32>(FMath::Max(MaxY, static_cast<int32>(InRegions[i].DestY + InRegions[i].Height)), 0, InHeight);
+			}
+			if (MaxX > MinX && MaxY > MinY)
+			{
+				FUpdateTextureRegion2D Merged(
+					static_cast<uint32>(MinX), static_cast<uint32>(MinY),
+					static_cast<uint32>(MinX), static_cast<uint32>(MinY),
+					static_cast<uint32>(MaxX - MinX), static_cast<uint32>(MaxY - MinY));
+				Frame->DirtyRegions.Add(Merged);
+			}
+		}
+
+		if (Frame->DirtyRegions.IsEmpty())
+		{
+			Frame->bIsFullSurfaceDirty = true;
+		}
+	}
+	else
+	{
+		Frame->bIsFullSurfaceDirty = true;
+		Frame->DirtyRegions.Reset();
+	}
+
 	{
 		FScopeLock Lock(&PoolMutex);
 		Frame->Generation = ++PaintGeneration;
@@ -226,26 +314,6 @@ void FSwuiFullSurfaceCpuRenderer::TickUpload(
 		return;
 	}
 
-	// Force-every-tick: re-upload the oldest in-flight frame.
-	if (bForceEveryTick)
-	{
-		FScopeLock Lock(&PoolMutex);
-		if (!LatestReadyFrame && InFlightCount > 0)
-		{
-			int32 OldestIdx = 0;
-			uint64 MinGen = InFlightFrames[0]->Generation;
-			for (int32 i = 1; i < InFlightCount; ++i)
-			{
-				if (InFlightFrames[i]->Generation < MinGen)
-				{
-					MinGen = InFlightFrames[i]->Generation;
-					OldestIdx = i;
-				}
-			}
-			LatestReadyFrame = InFlightFrames[OldestIdx];
-			InFlightFrames[OldestIdx] = InFlightFrames[--InFlightCount];
-		}
-	}
 
 	FSwuiFullSurfaceFrame* Frame;
 	{
@@ -267,15 +335,64 @@ void FSwuiFullSurfaceCpuRenderer::TickUpload(
 	const double PaintArrivalTime = Frame->PaintTime;
 
 	ENQUEUE_RENDER_COMMAND(SwuiFullSurfaceUpload)(
-		[this, Frame, TexRHI, FrameWidth, FrameHeight, FramePitch](FRHICommandList& RHICmdList)
+		[this, Frame, TexRHI, FrameWidth, FrameHeight, FramePitch](FRHICommandListImmediate& RHICmdList)
 		{
 			if (TexRHI)
 			{
-				FUpdateTextureRegion2D Region(0, 0, 0, 0, FrameWidth, FrameHeight);
-				RHICmdList.UpdateTexture2D(TexRHI, 0, Region, FramePitch, Frame->Pixels.GetData());
+				const int32 TexW = TexRHI->GetSizeX();
+				const int32 TexH = TexRHI->GetSizeY();
+
+				if (TexW == FrameWidth && TexH == FrameHeight)
+				{
+					if (!Frame->bIsFullSurfaceDirty && Frame->DirtyRegions.Num() > 0)
+					{
+						for (const FUpdateTextureRegion2D& Region : Frame->DirtyRegions)
+						{
+							if (Region.Width > 0 && Region.Height > 0 &&
+								(Region.DestX + Region.Width <= static_cast<uint32>(TexW)) &&
+								(Region.DestY + Region.Height <= static_cast<uint32>(TexH)))
+							{
+								// Match engine's UTexture2D::UpdateTextureRegions:
+								// Offset source data pointer and set source offsets to zero for RHI compatibility.
+								FUpdateTextureRegion2D RegionCopy = Region;
+								const uint8* RegionSourceData = Frame->Pixels.GetData()
+									+ (RegionCopy.SrcY * FramePitch)
+									+ (RegionCopy.SrcX * 4);
+								RegionCopy.SrcX = 0;
+								RegionCopy.SrcY = 0;
+
+								RHIUpdateTexture2D(
+									TexRHI,
+									0,
+									RegionCopy,
+									FramePitch,
+									RegionSourceData);
+							}
+						}
+					}
+					else
+					{
+						FUpdateTextureRegion2D Region(0, 0, 0, 0, FrameWidth, FrameHeight);
+						RHIUpdateTexture2D(TexRHI, 0, Region, FramePitch, Frame->Pixels.GetData());
+					}
+				}
+				else
+				{
+					const int32 UploadW = FMath::Min(TexW, FrameWidth);
+					const int32 UploadH = FMath::Min(TexH, FrameHeight);
+					if (UploadW > 0 && UploadH > 0)
+					{
+						FUpdateTextureRegion2D Region(0, 0, 0, 0, UploadW, UploadH);
+						RHIUpdateTexture2D(TexRHI, 0, Region, FramePitch, Frame->Pixels.GetData());
+					}
+				}
 			}
 
-			this->ReturnFrameToFree(Frame);
+			// Defer returning frame buffer to the free pool until the RHI thread has finished uploading
+			RHICmdList.EnqueueLambda([this, Frame](FRHICommandList&)
+			{
+				this->ReturnFrameToFree(Frame);
+			});
 		});
 
 	const double EnqueueMs = (FPlatformTime::Seconds() - EnqueueStart) * 1000.0;

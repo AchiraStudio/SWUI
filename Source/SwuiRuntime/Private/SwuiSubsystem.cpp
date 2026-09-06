@@ -5,6 +5,7 @@
 #include "SwuiView.h"
 #include "SwuiInputPreprocessor.h"
 #include "SwuiHudRoiOverlayWidget.h"
+#include "SwuiProfiler.h"
 #include "SwuiCVars.h"
 #include "SwuiCVarHelpers.h"
 #include "ISwuiRuntime.h"
@@ -545,7 +546,7 @@ FString USwuiSubsystem::ResolveNamespace(UObject* Source, const FString& Namespa
 	return ClassName.ToLower();
 }
 
-void USwuiSubsystem::ObserveProperty(UObject* Source, const FString& Namespace, const FName& PropertyName)
+void USwuiSubsystem::ObserveProperty(UObject* Source, const FString& Namespace, const FName& PropertyName, ESwuiUpdatePriority Priority)
 {
 	if (!Source) return;
 
@@ -582,6 +583,7 @@ void USwuiSubsystem::ObserveProperty(UObject* Source, const FString& Namespace, 
 	Entry.PropertyName  = PropertyName;
 	Entry.CachedProp    = Prop;
 	Entry.NamespacedKey = NsKey;
+	Entry.Priority      = Priority;
 
 	ObservedProperties.Add(Entry);
 }
@@ -745,9 +747,16 @@ void USwuiSubsystem::Unobserve(UObject* Source)
 
 void USwuiSubsystem::Tick(float DeltaTime)
 {
-	// Pump CEF at the start of the SWUI tick so queued CEF UI tasks,
-	// browser timers, rAF, JS work, and pending paint work can progress.
-	SwuiManager::DoSwuiMessageLoop();
+	SWUI_PROFILE_SCOPE(GameThreadTotal);
+
+	// Pump CEF at the start of the SWUI tick within a bounded time budget
+	// so queued CEF UI tasks, timers, and JS work progress without stalling the game thread.
+	const float CefBudgetMs = CVarSwuiCefMessageLoopBudgetMs.GetValueOnGameThread();
+	const double CefBudgetSec = (CefBudgetMs > 0.f) ? (static_cast<double>(CefBudgetMs) * 0.001) : 0.0015;
+	{
+		SWUI_PROFILE_SCOPE(CefMessageLoop);
+		SwuiManager::DoSwuiMessageLoopBudgeted(CefBudgetSec);
+	}
 
 	if (!View) return;
 
@@ -781,13 +790,22 @@ void USwuiSubsystem::Tick(float DeltaTime)
 	// 1. Flush game state to JS FIRST so that DOM and animations receive new values
 	// before the compositor renders the visual frame.
 	const bool bCanFlushJs = !View->InstanceSettings.bPauseBrowserUpdates;
-	if (bCanFlushJs && FlushHudStateToJs(DeltaTime))
+	const bool bFlushedState = bCanFlushJs && FlushHudStateToJs(DeltaTime);
+	if (bFlushedState)
 	{
 		View->NotifyHudStateFlushed();
 	}
 
 	// 2. Drive continuous browser frame + upload/blit latest surface.
 	View->TickDeferredUpload();
+
+	// If a state script was queued and posted to CEF during this tick,
+	// pump CEF immediately so V8 parses and evaluates the script on the current frame
+	// instead of waiting until the next engine tick.
+	if (bFlushedState)
+	{
+		SwuiManager::DoSwuiMessageLoop();
+	}
 
 	// ── HUD ROI overlay ─────────────────────────────────────────────────
 	UpdateRoiOverlay();
@@ -843,13 +861,21 @@ void USwuiSubsystem::Tick(float DeltaTime)
 		}
 	}
 
-	// 3. Pump again after state flush & render commands to drain CEF tasks.
-	SwuiManager::DoSwuiMessageLoop();
+	// 3. Update SWUI Runtime Profiler
+	FSwuiProfiler::Update(
+		DeltaTime,
+		AvgFPS,
+		View ? static_cast<float>(View->GetWindowlessFrameRate()) : 60.f,
+		View ? 1 : 0,
+		View ? (View->GetResolvedRenderingMode() == ESwuiRenderingMode::GpuAccelerated ? TEXT("GPU (D3D Shared)") : TEXT("CPU Fallback")) : TEXT("None")
+	);
 }
 
 bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 {
 	if (!View) return false;
+
+	SWUI_PROFILE_SCOPE(StateSync);
 
 	const double FlushStartTime = FPlatformTime::Seconds();
 
@@ -858,6 +884,37 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 			CVarSwuiHudFlushBeforeFrame.GetValueOnGameThread(),
 			View->InstanceSettings.bFlushHudStateBeforeBrowserFrame);
 	if (!bFlushBeforeFrame) return false;
+
+	// Evaluate state update policy cadence
+	const double Now = FPlatformTime::Seconds();
+	float MinInterval = 0.f;
+	switch (StateUpdatePolicy)
+	{
+	case ESwuiStateUpdatePolicy::Rate15Hz:  MinInterval = 1.0f / 15.0f; break;
+	case ESwuiStateUpdatePolicy::Rate30Hz:  MinInterval = 1.0f / 30.0f; break;
+	case ESwuiStateUpdatePolicy::Rate60Hz:  MinInterval = 1.0f / 60.0f; break;
+	case ESwuiStateUpdatePolicy::Rate120Hz: MinInterval = 1.0f / 120.0f; break;
+	case ESwuiStateUpdatePolicy::EventDriven:
+		if (QueuedHudEventScripts.Num() == 0)
+		{
+			return false;
+		}
+		break;
+	case ESwuiStateUpdatePolicy::OnChange:
+	case ESwuiStateUpdatePolicy::EveryFrame:
+	default:
+		MinInterval = 0.f;
+		break;
+	}
+
+	if (MinInterval > 0.f && LastStateFlushTime > 0.0)
+	{
+		if ((Now - LastStateFlushTime) < (MinInterval - 0.001) && QueuedHudEventScripts.Num() == 0)
+		{
+			return false;
+		}
+	}
+	LastStateFlushTime = Now;
 
 	const int32 CefFPS = SwuiCVarInt(
 		CVarSwuiHudMaxBrowserFPS.GetValueOnGameThread(),
@@ -894,6 +951,12 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 				continue;
 			}
 
+			// Low priority properties are checked every 4th frame (~15Hz at 60fps)
+			if (Entry.Priority == ESwuiUpdatePriority::Low && (FrameCounter % 4) != 0)
+			{
+				continue;
+			}
+
 			UObject* Obj = Entry.Source.Get();
 			if (!Entry.CachedProp) continue;
 
@@ -913,23 +976,30 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		if (ChangedCount > 0)
 		{
 			++Telemetry.StateGeneration;
+			FSwuiProfiler::RecordStateUpdate(ChangedCount);
 		}
 
-		FString StateJson = ChangedEntries.Num() > 0
-			? FString::Printf(TEXT("{%s}"), *FString::Join(ChangedEntries, TEXT(",")))
-			: TEXT("null");
+		const bool bForceTickScript = CVarSwuiTickEventPolicy.GetValueOnGameThread() != 0;
+		const bool bHasStateOrEvents = (ChangedCount > 0) || (QueuedHudEventScripts.Num() > 0) || bForceTickScript;
 
-		BatchedScript = FString::Printf(
-			TEXT("(function(){")
-			TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,stateVersion:%llu,cefFps:%d,width:%d,height:%d,timeDilation:%.3f,paused:%s};")
-			TEXT("var u=%s;")
-			TEXT("if(u){if(s._batch){s._batch(u,s._runtime);}else{for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);}}}")
-			TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
-			TEXT("})()"),
-			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, Telemetry.StateGeneration, CefFPS, View->Width, View->Height,
-			TimeDilation, bIsPaused ? TEXT("true") : TEXT("false"),
-			*StateJson);
+		if (bHasStateOrEvents)
+		{
+			FString StateJson = ChangedEntries.Num() > 0
+				? FString::Printf(TEXT("{%s}"), *FString::Join(ChangedEntries, TEXT(",")))
+				: TEXT("null");
+
+			BatchedScript = FString::Printf(
+				TEXT("(function(){")
+				TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
+				TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,stateVersion:%llu,cefFps:%d,width:%d,height:%d,timeDilation:%.3f,paused:%s};")
+				TEXT("var u=%s;")
+				TEXT("if(u){if(s._batch){s._batch(u,s._runtime);}else{for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);}}}")
+				TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));")
+				TEXT("})()"),
+				AvgFPS, LastDeltaTime, WorldTime, FrameCounter, Telemetry.StateGeneration, CefFPS, View->Width, View->Height,
+				TimeDilation, bIsPaused ? TEXT("true") : TEXT("false"),
+				*StateJson);
+		}
 	}
 	else
 	{
@@ -941,6 +1011,11 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 			if (!Entry.Source.IsValid())
 			{
 				ObservedProperties.RemoveAtSwap(i);
+				continue;
+			}
+
+			if (Entry.Priority == ESwuiUpdatePriority::Low && (FrameCounter % 4) != 0)
+			{
 				continue;
 			}
 
@@ -965,20 +1040,27 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		if (ChangedCount > 0)
 		{
 			++Telemetry.StateGeneration;
+			FSwuiProfiler::RecordStateUpdate(ChangedCount);
 		}
 
-		BatchedScript = FString::Printf(
-			TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-			TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,stateVersion:%llu,cefFps:%d,width:%d,height:%d,timeDilation:%.3f,paused:%s};"),
-			AvgFPS, LastDeltaTime, WorldTime, FrameCounter, Telemetry.StateGeneration, CefFPS, View->Width, View->Height,
-			TimeDilation, bIsPaused ? TEXT("true") : TEXT("false"));
+		const bool bForceTickScript = CVarSwuiTickEventPolicy.GetValueOnGameThread() != 0;
+		const bool bHasStateOrEvents = (ChangedCount > 0) || (QueuedHudEventScripts.Num() > 0) || bForceTickScript;
 
-		for (const FString& Assign : PropertyAssignments)
+		if (bHasStateOrEvents)
 		{
-			BatchedScript += Assign;
-		}
+			BatchedScript = FString::Printf(
+				TEXT("(function(){var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
+				TEXT("s._runtime={fps:%.1f,dt:%.4f,time:%.3f,frameIndex:%llu,stateVersion:%llu,cefFps:%d,width:%d,height:%d,timeDilation:%.3f,paused:%s};"),
+				AvgFPS, LastDeltaTime, WorldTime, FrameCounter, Telemetry.StateGeneration, CefFPS, View->Width, View->Height,
+				TimeDilation, bIsPaused ? TEXT("true") : TEXT("false"));
 
-		BatchedScript += TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));})();");
+			for (const FString& Assign : PropertyAssignments)
+			{
+				BatchedScript += Assign;
+			}
+
+			BatchedScript += TEXT("document.dispatchEvent(new CustomEvent('swui:tick',{detail:s._runtime}));})();");
+		}
 	}
 
 	Telemetry.ChangedPropertiesNum = ChangedCount;
@@ -1010,8 +1092,18 @@ bool USwuiSubsystem::FlushHudStateToJs(float DeltaTime)
 		}
 	}
 
-	View->QueuePendingScript(BatchedScript);
-	return true;
+	if (!BatchedScript.IsEmpty())
+	{
+		SWUI_PROFILE_SCOPE(JsDispatch);
+		View->QueuePendingScript(BatchedScript);
+	}
+
+	if (ChangedCount > 0)
+	{
+		View->GetScheduler().NotifyActivity(false);
+	}
+
+	return !BatchedScript.IsEmpty();
 }
 
 
@@ -1035,6 +1127,11 @@ void USwuiSubsystem::QueueHudEventScript(const FString& Script)
 		return;
 	}
 	QueuedHudEventScripts.Add(Script);
+
+	if (View)
+	{
+		View->GetScheduler().NotifyActivity(true);
+	}
 }
 
 

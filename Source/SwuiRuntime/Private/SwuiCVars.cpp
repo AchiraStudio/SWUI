@@ -164,6 +164,12 @@ TAutoConsoleVariable<int32> CVarSwuiCustomUiHeight(
 	ECVF_Default);
 
 // Profiling helpers
+TAutoConsoleVariable<int32> CVarSwuiProfiler(
+	TEXT("swui.profiler"),
+	0,
+	TEXT("Enable on-screen SWUI runtime profiler HUD overlay. 0 = off, 1 = on."),
+	ECVF_Default);
+
 TAutoConsoleVariable<int32> CVarSwuiNoTextureUpload(
 	TEXT("swui.prof.NoTextureUpload"),
 	0,
@@ -194,6 +200,24 @@ TAutoConsoleVariable<int32> CVarSwuiBatchStateSync(
 	TEXT("swui.perf.BatchStateSync"),
 	1,
 	TEXT("Enable batch state synchronization to JS runtime. 0 = legacy string eval, 1 = atomic JSON batch."),
+	ECVF_Default);
+
+TAutoConsoleVariable<float> CVarSwuiCefMessageLoopBudgetMs(
+	TEXT("swui.perf.CefMessageLoopBudgetMs"),
+	1.5f,
+	TEXT("Maximum game-thread budget (ms) per frame for CEF message loop work. <=0 disables budget."),
+	ECVF_Default);
+
+TAutoConsoleVariable<int32> CVarSwuiDirtyRectUpload(
+	TEXT("swui.perf.DirtyRectUpload"),
+	1,
+	TEXT("Upload only dirty sub-rectangles to GPU texture rather than full surface. 0 = force full surface, 1 = sub-rects (default)."),
+	ECVF_Default);
+
+TAutoConsoleVariable<int32> CVarSwuiTickEventPolicy(
+	TEXT("swui.perf.TickEventPolicy"),
+	0,
+	TEXT("Policy for pushing swui:tick scripts into CEF. 0 = only on state change or events (prevents V8 GC stalls, default), 1 = every frame."),
 	ECVF_Default);
 
 

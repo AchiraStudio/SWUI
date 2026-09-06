@@ -3,6 +3,7 @@
 #include "SwuiManager.h"
 #include "SwuiSettings.h"
 #include "SwuiView.h"
+#include "SwuiProfiler.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
@@ -26,6 +27,8 @@ class FSwuiRuntime : public ISwuiRuntime
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override
 	{
+		FSwuiProfiler::Initialize();
+
 		if (GetDefault<USwuiSettings>()->bDisablePlugin)
 		{
 			UE_LOG(LogSwuiRuntime, Log, TEXT(" STATUS: Disabled via Project Settings > Plugins > SimpleWebUI > Debug"));
@@ -217,6 +220,7 @@ class FSwuiRuntime : public ISwuiRuntime
 				bAllClosed ? TEXT("true") : TEXT("false (timeout)"));
 		}
 
+		FSwuiProfiler::Shutdown();
 		CefShutdown();
 	}
 };
