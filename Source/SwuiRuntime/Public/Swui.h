@@ -187,7 +187,7 @@ public:
 
 	/** Browser frame cap for HUD mode. If UE runs above this, frames are paced to this cap. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|Performance", meta=(EditCondition="bIsHUD", ClampMin="1", ClampMax="300"))
-	int32 MaxBrowserFramesPerSecond = 120;
+	int32 MaxBrowserFramesPerSecond = 60;
 
 	// ---- Performance | Upload Strategy ------------------------------------
 

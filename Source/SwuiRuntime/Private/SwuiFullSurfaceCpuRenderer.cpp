@@ -206,6 +206,8 @@ void FSwuiFullSurfaceCpuRenderer::StagePaint(
 		return;
 	}
 
+	// Guarantee 100% frame pool coherence by copying the full composited CEF buffer.
+	// Partial row slicing leaves stale visual slices in pooled frames across cycles.
 	FPlatformMemory::Memcpy(Frame->Pixels.GetData(), Buffer, ByteCount);
 
 	const double CopyMs = (FPlatformTime::Seconds() - CopyStart) * 1000.0;
@@ -214,7 +216,7 @@ void FSwuiFullSurfaceCpuRenderer::StagePaint(
 	Frame->Height     = InHeight;
 	Frame->PaintTime  = PaintArrivalTime;
 
-	// Calculate dirty regions for sub-rect upload
+	// Calculate dirty regions for sub-rect upload if explicitly enabled via CVar
 	int64 DirtyPixelArea = 0;
 	if (InRegions && InRegionCount > 0)
 	{
@@ -225,9 +227,11 @@ void FSwuiFullSurfaceCpuRenderer::StagePaint(
 	}
 
 	const int64 FullSurfaceArea = static_cast<int64>(InWidth) * static_cast<int64>(InHeight);
-	const bool bSubRectAllowed = (CVarSwuiDirtyRectUpload.GetValueOnAnyThread() != 0);
+	// Sub-rect upload is disabled by default (requires explicit CVar value 2) to prevent
+	// visual clipping (such as cut-off HUD dials/widgets) and stale pixels on transparent overlays.
+	const bool bSubRectAllowed = (CVarSwuiDirtyRectUpload.GetValueOnAnyThread() == 2);
 
-	if (bSubRectAllowed && InRegions && InRegionCount > 0 && DirtyPixelArea < static_cast<int64>(FullSurfaceArea * 0.85))
+	if (bHasEverHadFrame && bSubRectAllowed && InRegions && InRegionCount > 0 && DirtyPixelArea < static_cast<int64>(FullSurfaceArea * 0.85))
 	{
 		Frame->bIsFullSurfaceDirty = false;
 		Frame->DirtyRegions.Reset();

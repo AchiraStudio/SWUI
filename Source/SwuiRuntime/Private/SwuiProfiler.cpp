@@ -202,12 +202,14 @@ public:
 						]
 					]
 
-					// Metrics Row: Pixels & Updates
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
 					[ SNew(STextBlock).Text(this, &SSwuiProfilerOverlay::GetPixelStatsText).Font(MonospaceFont).ColorAndOpacity(FLinearColor(0.8f, 0.8f, 0.8f)) ]
 
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
 					[ SNew(STextBlock).Text(this, &SSwuiProfilerOverlay::GetIOStatsText).Font(MonospaceFont).ColorAndOpacity(FLinearColor(0.8f, 0.8f, 0.8f)) ]
+
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
+					[ SNew(STextBlock).Text(this, &SSwuiProfilerOverlay::GetLongTaskText).Font(MonospaceFont).ColorAndOpacity(FLinearColor(1.0f, 0.75f, 0.35f)) ]
 				]
 			]
 		];
@@ -341,6 +343,17 @@ private:
 		return FText::FromString(FString::Printf(TEXT("State Updates: %3u/s | Input: %3u/s (Coalesced: %3u/s)"),
 			S.StateUpdatesPerSec, S.InputEventsPerSec, S.InputCoalescedPerSec));
 	}
+
+	FText GetLongTaskText() const
+	{
+		const FSwuiProfilerSnapshot& S = FSwuiProfiler::GetSnapshot();
+		if (S.TotalLongTaskCount == 0)
+		{
+			return FText::FromString(TEXT("Browser LongTasks: None (>16ms)"));
+		}
+		return FText::FromString(FString::Printf(TEXT("Browser LongTasks: %3u (>16ms) [Last: %5.1f ms]"),
+			S.TotalLongTaskCount, S.LastLongTaskDurationMs));
+	}
 };
 
 // ---------------------------------------------------------------------------
@@ -459,6 +472,13 @@ void FSwuiProfiler::RecordPresentedFrame(float PaintToPresentLatencyMs)
 	FScopeLock Lock(&GProfilerMutex);
 	GLatencyStat.AddSample(PaintToPresentLatencyMs);
 	GProfilerSnapshot.PaintToPresentLatencyMs = PaintToPresentLatencyMs;
+}
+
+void FSwuiProfiler::RecordLongTask(float DurationMs)
+{
+	FScopeLock Lock(&GProfilerMutex);
+	GProfilerSnapshot.LastLongTaskDurationMs = DurationMs;
+	GProfilerSnapshot.TotalLongTaskCount++;
 }
 
 void FSwuiProfiler::Update(float DeltaTime, float CurrentEngineFps, float TargetSwuiFps, int32 BrowserCount, const FString& BackendName)

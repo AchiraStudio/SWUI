@@ -171,6 +171,12 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 	InstanceSettings = InInstanceSettings;
 	UpdateHudRoiSettings(InInstanceSettings.HudRoiSettings);
 
+	// Ensure dirty rect upload CVar is reset to 0 in running editor sessions
+	if (CVarSwuiDirtyRectUpload.GetValueOnGameThread() == 1)
+	{
+		CVarSwuiDirtyRectUpload->Set(0, ECVF_SetByCode);
+	}
+
 	// Resolve UI resolution preset: override Width/Height with the internal
 	// render size chosen by the user, keeping the Subsystem-provided values
 	// as the viewport reference for NativeViewport mode.
@@ -266,7 +272,7 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		InitHudMaxBrowserFps > 0 ? InitHudMaxBrowserFps : InstanceSettings.MaxBrowserFramesPerSecond,
 		30,
 		240);
-	WindowlessFrameRate = TargetHz > 0 ? TargetHz : 120;
+	WindowlessFrameRate = TargetHz > 0 ? TargetHz : 60;
 	BrowserSettings.windowless_frame_rate = WindowlessFrameRate;
 
 	ISwuiRenderTarget* CpuTarget = static_cast<ISwuiRenderTarget*>(this);
@@ -298,7 +304,7 @@ void USwuiView::Init(const FSwuiInstanceSettings& InInstanceSettings)
 		return;
 	}
 
-	int32 TargetFPS = WindowlessFrameRate > 0 ? WindowlessFrameRate : 120;
+	int32 TargetFPS = WindowlessFrameRate > 0 ? WindowlessFrameRate : 60;
 	if (InstanceSettings.OverrideFrameRate > 0)
 	{
 		TargetFPS = InstanceSettings.OverrideFrameRate;
@@ -471,7 +477,7 @@ void USwuiView::QueuePendingScript(const FString& InScript)
 		return;
 	}
 
-	Scheduler.NotifyActivity(true);
+	Scheduler.NotifyStateUpdate();
 
 	if (!PendingScript.IsEmpty())
 	{
@@ -569,6 +575,7 @@ bool USwuiView::HandleIncomingMessage(const FString& MessageJson)
 	{
 		double DurationMs = 0.0;
 		MessageObject->TryGetNumberField(TEXT("duration"), DurationMs);
+		FSwuiProfiler::RecordLongTask(static_cast<float>(DurationMs));
 		UE_LOG(LogSwuiRuntime, Warning, TEXT("[SWUI JS LongTask] CEF script/layout task took %.2f ms (non-blocking for UE)"), DurationMs);
 		return true;
 	}
@@ -820,15 +827,17 @@ bool USwuiView::FlushHudStateAndRequestBrowserFrame(
 
 	if (!bExternalBeginFrameActive)
 	{
-		if (bHasScript)
+		if (bHasScript || bForceFrame)
 		{
-			const std::string StdScript = std::string(TCHAR_TO_UTF8(*CombinedScript));
+			const std::string StdScript = bHasScript
+				? std::string(TCHAR_TO_UTF8(*CombinedScript))
+				: std::string();
 			CefPostTask(
 				TID_UI,
 				new FSwuiFlushAndBeginFrameTask(
 					CefData->Browser,
 					StdScript,
-					/*bInvalidateView=*/false,
+					/*bInvalidateView=*/bForceFrame,
 					/*bSendBeginFrame=*/false));
 		}
 
@@ -1368,7 +1377,7 @@ void USwuiView::DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTic
 
 	FString ScriptToSend = MoveTemp(PendingScript);
 	const bool bHasScript = !ScriptToSend.IsEmpty();
-	const bool bForce = bDebugForceEveryTick || bHasScript;
+	const bool bForce = bDebugForceEveryTick;
 
 	// Dynamic frame-rate synchronization with CEF browser host (only for non-adaptive modes to prevent timer jitter)
 	if (Scheduler.GetFrameRateMode() != ESwuiFrameRateMode::Adaptive)
@@ -1396,8 +1405,8 @@ void USwuiView::DriveContinuousBrowserFrame(double Now, bool bDebugForceEveryTic
 	}
 	else if (bHasScript)
 	{
-		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), true);
-		LastBrowserFrameTime = Now;
+		// Deliver script update to V8 without forcing a redundant visual compositor redraw
+		FlushHudStateAndRequestBrowserFrame(ScriptToSend, static_cast<float>(DeltaSeconds), false);
 	}
 }
 

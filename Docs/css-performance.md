@@ -51,15 +51,15 @@ SWUI eliminates this by decoupling Chromium from the Unreal game loop:
 ### Key Decoupling Guarantees
 1. **Time-Budgeted CEF Pump (`swui.CefMessageLoopBudgetMs`, default 1.5ms):** CEF message processing will not stall the Unreal game thread even if heavy scripts or repaints are running.
 2. **Bounded Triple Buffering & Latest-Frame Discard:** Chromium writes to the background staging buffer. The game thread atomically grabs the newest completed frame. If Chromium takes 30ms on a frame, Unreal keeps displaying the previous frame without waiting. If Chromium produces multiple frames before Unreal presents, stale intermediate frames are discarded immediately.
-3. **Hardware-Resilient Dual-Backend Rendering:** On DirectX 11 RHI, direct DXGI shared textures stream Chromium GPU surfaces natively to Unreal RHI textures. On DirectX 12 RHI (Unreal Engine 5.7 default), SWUI automatically and safely routes through the optimized thread-safe CPU renderer (`RHIUpdateTexture2D`), completely eliminating cross-API GPU memory management (MMU) page faults and driver hangs (`DXGI_ERROR_DEVICE_HUNG`) while sustaining smooth 60–120 FPS.
+3. **Hardware-Resilient Direct GPU Shared Texture Rendering:** On both DirectX 11 and DirectX 12 (via D3D11On12 interop), SWUI streams Chromium GPU surfaces directly to Unreal RHI textures with zero CPU staging and zero PCIe re-upload overhead. If direct GPU sharing is unsupported or disabled, SWUI automatically falls back to the high-performance CPU ring-buffered renderer (`RHIUpdateTexture2D`).
 
 ---
 
 ## 2. CSS Property Performance Tiers
 
-Every CSS property you animate falls into one of three distinct engine cost tiers in Chromium windowless rendering:
+Every CSS property you animate falls into one of three distinct engine cost tiers in Chromium windowless rendering. *(Note: Time ranges represent target metrics on typical desktop hardware and will vary based on DOM complexity, resolution, and GPU capability).*
 
-| Tier | Compositor Impact | Visual Cost | Recommended Usage |
+| Tier | Compositor Impact | Visual Cost Target | Recommended Usage |
 |---|---|---|---|
 | **Tier A (Green)** | Zero Reflow, GPU Compositor Only | Minimal (< 0.1ms) | Continuous animations, health bars, radar sweeps, pop-up dialogs, HUD reticles. |
 | **Tier B (Yellow)** | Paint Only (Dirty Region Rasterized) | Moderate (0.5 – 2.0ms) | Hover states, color shifts, focus rings, occasional UI highlights. |
@@ -191,29 +191,15 @@ When the bridge experiences backpressure or low framerate, high-priority state t
 5. `Background`: Version string, player profile metadata.
 
 ### Client-Side Interpolation (Anti-Pattern: 120Hz Raw Floats)
-Instead of sending player velocity or health at 120 Hz across the JSON bridge, send the target value at 30/60 Hz and interpolate smoothly in the browser:
+Instead of sending player velocity or health at 120 Hz across the JSON bridge, send the target value at 30/60 Hz and interpolate smoothly at browser display rates:
 
 ```typescript
-// Client-side smooth interpolation hook (SwuiClientLib)
-function useInterpolatedValue(targetValue: number, speed: number = 0.15) {
-    const [current, setCurrent] = useState(targetValue);
-    
-    useEffect(() => {
-        let animId: number;
-        const tick = () => {
-            setCurrent(prev => {
-                const diff = targetValue - prev;
-                if (Math.abs(diff) < 0.001) return targetValue;
-                return prev + diff * speed;
-            });
-            animId = requestAnimationFrame(tick);
-        };
-        animId = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(animId);
-    }, [targetValue, speed]);
-    
-    return current;
-}
+import { Swui } from '@simplewebui/client';
+
+// Built-in smooth interpolation helper (SwuiClientLib)
+const unsubscribe = Swui.interpolate('Player.Health', (currentHealth) => {
+    healthBarElement.style.transform = `scaleX(${currentHealth / 100})`;
+}, { speed: 0.15 });
 ```
 
 ---

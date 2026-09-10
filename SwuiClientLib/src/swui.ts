@@ -865,22 +865,94 @@ const animation = {
   },
 };
 
-// ── Long Task Detection (Phase 13) ──────────────────────────────────────────
-if (typeof window !== 'undefined' && typeof PerformanceObserver !== 'undefined') {
-  try {
-    const _longTaskObserver = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        if (entry.duration > 16) {
-          postMessage({
-            type: 'swui:longtask',
-            duration: entry.duration,
-          });
-        }
+// ── Client-Side State Interpolation (Phase 17) ─────────────────────────────
+
+export interface InterpolationOptions {
+  speed?: number;         // Smooth lerp factor per frame (default: 0.15)
+  snapThreshold?: number; // Distance below which it snaps to target (default: 0.001)
+}
+
+function interpolate(
+  key: string,
+  callback: (currentValue: number) => void,
+  options?: InterpolationOptions
+): Unsubscribe {
+  const speed = options?.speed ?? 0.15;
+  const snapThreshold = options?.snapThreshold ?? 0.001;
+
+  let current = typeof get(key) === 'number' ? (get(key) as number) : 0;
+  let target = current;
+  let rafId: number | null = null;
+  let active = false;
+
+  const step = () => {
+    const diff = target - current;
+    if (Math.abs(diff) <= snapThreshold) {
+      current = target;
+      callback(current);
+      active = false;
+      rafId = null;
+      return;
+    }
+
+    current += diff * speed;
+    callback(current);
+    rafId = requestAnimationFrame(step);
+  };
+
+  const unsub = on(key, (val) => {
+    if (typeof val === 'number') {
+      target = val;
+      if (!active) {
+        active = true;
+        rafId = requestAnimationFrame(step);
       }
-    });
-    _longTaskObserver.observe({ entryTypes: ['longtask'] });
-  } catch {
-    // Unsupported or restricted environment, ignore safely
+    }
+  });
+
+  // Initial callback
+  callback(current);
+
+  return () => {
+    unsub();
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    active = false;
+  };
+}
+
+// ── Long Task Detection (Phase 13) ──────────────────────────────────────────
+let _lastLongTaskPostTime = 0;
+
+if (typeof window !== 'undefined' && typeof PerformanceObserver !== 'undefined') {
+  // Guard long task observer so shipping builds or embedded contexts can disable it
+  const isEnabled = (window as unknown as { __SWUI_ENABLE_LONGTASK_MONITOR__?: boolean }).__SWUI_ENABLE_LONGTASK_MONITOR__ !== false;
+  if (isEnabled) {
+    try {
+      const _longTaskObserver = new PerformanceObserver((list) => {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        // Rate-limit reports across the IPC bridge to prevent spamming the Unreal game thread
+        if (now - _lastLongTaskPostTime < 250) {
+          return;
+        }
+
+        for (const entry of list.getEntries()) {
+          if (entry.duration > 16) {
+            _lastLongTaskPostTime = now;
+            postMessage({
+              type: 'swui:longtask',
+              duration: entry.duration,
+            });
+            break;
+          }
+        }
+      });
+      _longTaskObserver.observe({ entryTypes: ['longtask'] });
+    } catch {
+      // Unsupported or restricted environment, ignore safely
+    }
   }
 }
 
@@ -889,6 +961,8 @@ if (typeof window !== 'undefined' && typeof PerformanceObserver !== 'undefined')
 const Swui = {
   // State & Sync
   on, onBatch, onTick, get, getAll, updateState, query,
+  // Client-Side Interpolation (Phase 17)
+  interpolate,
   // Time & Clock (Phase 2)
   gameTimeNow, updateClock,
   // Timeline (Phase 2)
@@ -910,7 +984,7 @@ const Swui = {
 
 export { SwuiHoldProgress } from './SwuiHoldProgress';
 export default Swui;
-export { postMessage, emitNavigationEvent, onBatch, onTick, updateState, query, lerp, damp, createSpring, setActivity, animation };
+export { postMessage, emitNavigationEvent, onBatch, onTick, updateState, query, lerp, damp, createSpring, setActivity, animation, interpolate };
 
 
 

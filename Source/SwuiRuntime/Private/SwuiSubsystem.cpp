@@ -799,14 +799,6 @@ void USwuiSubsystem::Tick(float DeltaTime)
 	// 2. Drive continuous browser frame + upload/blit latest surface.
 	View->TickDeferredUpload();
 
-	// If a state script was queued and posted to CEF during this tick,
-	// pump CEF immediately so V8 parses and evaluates the script on the current frame
-	// instead of waiting until the next engine tick.
-	if (bFlushedState)
-	{
-		SwuiManager::DoSwuiMessageLoop();
-	}
-
 	// ── HUD ROI overlay ─────────────────────────────────────────────────
 	UpdateRoiOverlay();
 

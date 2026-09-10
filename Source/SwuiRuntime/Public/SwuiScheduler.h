@@ -19,8 +19,11 @@ public:
 	ESwuiSleepState GetSleepState() const { return SleepState; }
 	float GetEffectiveTargetFps() const { return EffectiveTargetFps; }
 
-	/** Called when user input, state update, animation or visual event occurs. */
+	/** Called when user input, animation or interactive visual event occurs. */
 	void NotifyActivity(bool bHighPriority = false);
+
+	/** Called when background state sync occurs without user interaction. */
+	void NotifyStateUpdate();
 
 	/** Force immediate wake from sleep to active cadence. */
 	void Wake();

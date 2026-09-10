@@ -53,6 +53,19 @@ void FSwuiScheduler::NotifyActivity(bool bHighPriority)
 	}
 }
 
+void FSwuiScheduler::NotifyStateUpdate()
+{
+	const double Now = FPlatformTime::Seconds();
+	LastActivityTime = Now;
+
+	if (SleepState == ESwuiSleepState::Sleeping)
+	{
+		// Wake to idle/normal cadence without artificially pinning to 120 Hz
+		SleepState = ESwuiSleepState::Idle;
+		EffectiveTargetFps = 30.f;
+	}
+}
+
 void FSwuiScheduler::Wake()
 {
 	const double Now = FPlatformTime::Seconds();
@@ -146,16 +159,14 @@ void FSwuiScheduler::UpdateAdaptiveState(double Now)
 
 bool FSwuiScheduler::Tick(double Now, float DeltaTime, bool bHasPendingScriptOrForce)
 {
+	UpdateAdaptiveState(Now);
+
 	if (bHasPendingScriptOrForce)
 	{
-		NotifyActivity(false);
-		Wake();
 		LastFrameProducedTime = Now;
 		AccumulatedFrameTime = 0.0;
 		return true;
 	}
-
-	UpdateAdaptiveState(Now);
 
 	if (SleepState == ESwuiSleepState::Sleeping)
 	{

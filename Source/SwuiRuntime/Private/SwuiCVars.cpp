@@ -210,8 +210,8 @@ TAutoConsoleVariable<float> CVarSwuiCefMessageLoopBudgetMs(
 
 TAutoConsoleVariable<int32> CVarSwuiDirtyRectUpload(
 	TEXT("swui.perf.DirtyRectUpload"),
-	1,
-	TEXT("Upload only dirty sub-rectangles to GPU texture rather than full surface. 0 = force full surface, 1 = sub-rects (default)."),
+	0,
+	TEXT("Upload only dirty sub-rectangles to GPU texture rather than full surface. 0 = force full surface (default), 1 = sub-rects."),
 	ECVF_Default);
 
 TAutoConsoleVariable<int32> CVarSwuiTickEventPolicy(

@@ -8,6 +8,7 @@
 #include "Windows/AllowWindowsPlatformTypes.h"
 #include <d3d11.h>
 #include <d3d11_1.h>
+#include <d3d11on12.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include "Windows/HideWindowsPlatformTypes.h"
@@ -51,16 +52,17 @@ private:
 
 	FCriticalSection BlitMutex;
 
-	// D3D12 cached objects
-	ID3D12CommandAllocator* D3D12CommandAllocator = nullptr;
-	ID3D12GraphicsCommandList* D3D12CommandList = nullptr;
-	ID3D12Fence* D3D12Fence = nullptr;
-	HANDLE D3D12FenceEvent = nullptr;
-	uint64 D3D12FenceValue = 0;
-
-	// Cache of opened shared resources to avoid re-opening every frame
+	// D3D11 cached objects
 	void* LastSharedHandle = nullptr;
 	ID3D11Texture2D* CachedD3D11SharedTex = nullptr;
-	ID3D12Resource* CachedD3D12SharedRes = nullptr;
+
+	// D3D11On12 interop objects for D3D12 RHI
+	ID3D11Device* D3D11On12BaseDevice = nullptr;
+	ID3D11On12Device* D3D11On12Device = nullptr;
+	ID3D11DeviceContext* D3D11On12Context = nullptr;
+	ID3D11Resource* CachedWrappedD3D12Dst = nullptr;
+	ID3D11Resource* CachedD3D11On12SharedTex = nullptr;
+	void* LastD3D12NativeDst = nullptr;
+	void* LastD3D12SharedHandle = nullptr;
 #endif
 };

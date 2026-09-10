@@ -57,6 +57,9 @@ struct FSwuiProfilerSnapshot
 	uint32 StateUpdatesPerSec = 0;
 	uint32 InputEventsPerSec = 0;
 	uint32 InputCoalescedPerSec = 0;
+
+	float LastLongTaskDurationMs = 0.f;
+	uint32 TotalLongTaskCount = 0;
 };
 
 class SWUIRUNTIME_API FSwuiProfiler
@@ -74,6 +77,7 @@ public:
 	static void RecordDroppedFrame();
 	static void RecordSkippedFrame();
 	static void RecordPresentedFrame(float PaintToPresentLatencyMs);
+	static void RecordLongTask(float DurationMs);
 
 	static void Update(float DeltaTime, float CurrentEngineFps, float TargetSwuiFps, int32 BrowserCount, const FString& BackendName);
 

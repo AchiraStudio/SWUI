@@ -251,7 +251,7 @@ struct FSwuiInstanceSettings
 	bool  bUseExternalBeginFrames         = false;
 	bool  bSendExternalBeginFrameFromTick = true;
 	bool  bFlushHudStateBeforeBrowserFrame = true;
-	int32 MaxBrowserFramesPerSecond       = 120;
+	int32 MaxBrowserFramesPerSecond       = 60;
 
 	// UI Frame Scheduler & Sleep/Wake settings
 	ESwuiFrameRateMode FrameRateMode = ESwuiFrameRateMode::MatchGame;
