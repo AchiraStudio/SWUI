@@ -96,6 +96,18 @@ public:
 	USwui();
 	void EnsureOwnerBindingSource();
 
+	// -----------------------------------------------------------------------
+	// SWUI 3.0 Multi-Document Integration
+	// -----------------------------------------------------------------------
+
+	/** Optional SWUI 3.0 Document Asset. If set, this component acts as an actor-placed facade for the document. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI|Document")
+	TObjectPtr<class USwuiDocumentAsset> DocumentAsset = nullptr;
+
+	/** Gets the active USwuiDocument runtime instance managed by USwuiDocumentManagerSubsystem if DocumentAsset is assigned. */
+	UFUNCTION(BlueprintPure, Category="SimpleWebUI|Document")
+	class USwuiDocument* GetManagedDocument() const;
+
 	// Used as the TypeScript interface name and generated file prefix.
 	// e.g. "PlayerHUD" → Content/UI/generated/PlayerHUD.generated.ts
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SimpleWebUI")

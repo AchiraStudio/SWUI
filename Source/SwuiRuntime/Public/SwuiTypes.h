@@ -89,6 +89,36 @@ enum class ESwuiUiResolutionPreset : uint8
 };
 
 // ---------------------------------------------------------------------------
+// SWUI 3.0 Document Lifecycle & Architecture Enums
+// ---------------------------------------------------------------------------
+
+UENUM(BlueprintType)
+enum class ESwuiDocumentState : uint8
+{
+	Unloaded    UMETA(DisplayName = "Unloaded"),
+	Loading     UMETA(DisplayName = "Loading"),
+	Preloaded   UMETA(DisplayName = "Preloaded"),
+	Active      UMETA(DisplayName = "Active"),
+	Sleeping    UMETA(DisplayName = "Sleeping"),
+	Unloading   UMETA(DisplayName = "Unloading")
+};
+
+UENUM(BlueprintType)
+enum class ESwuiDocumentLayer : uint8
+{
+	Persistent  UMETA(DisplayName = "Persistent (HUD/Overlay)"),
+	Level       UMETA(DisplayName = "Level (Contextual)"),
+	Modal       UMETA(DisplayName = "Modal (Menu/Popup)")
+};
+
+UENUM(BlueprintType)
+enum class ESwuiDocumentLoadBehavior : uint8
+{
+	Lazy        UMETA(DisplayName = "Lazy"),
+	Eager       UMETA(DisplayName = "Eager")
+};
+
+// ---------------------------------------------------------------------------
 // Navigation enums — used by USwuiNavigation for menu/input routing.
 // ---------------------------------------------------------------------------
 

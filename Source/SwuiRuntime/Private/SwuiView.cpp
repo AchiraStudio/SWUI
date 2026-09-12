@@ -434,6 +434,11 @@ void USwuiView::LoadURL(const FString& URI)
 		URI.StartsWith(TEXT("localhost"), ESearchCase::IgnoreCase) ||
 		URI.StartsWith(TEXT("file:///"), ESearchCase::IgnoreCase))
 	{
+		if (URI.Contains(TEXT("localhost:")) || URI.Contains(TEXT("127.0.0.1:")))
+		{
+			UE_LOG(LogSwuiRuntime, Warning, TEXT("[SWUI WARNING] Development dev-server detected (%s). Make sure to build production static assets (`swui build --production`) before shipping!"), *URI);
+		}
+
 		UE_LOG(LogSwuiRuntime, Log, TEXT("[SWUI LoadURL] %s"), *URI);
 		CefData->Browser->GetMainFrame()->LoadURL(*URI);
 		RequestBrowserVisualRefresh(true);
@@ -577,6 +582,16 @@ bool USwuiView::HandleIncomingMessage(const FString& MessageJson)
 		MessageObject->TryGetNumberField(TEXT("duration"), DurationMs);
 		FSwuiProfiler::RecordLongTask(static_cast<float>(DurationMs));
 		UE_LOG(LogSwuiRuntime, Warning, TEXT("[SWUI JS LongTask] CEF script/layout task took %.2f ms (non-blocking for UE)"), DurationMs);
+		return true;
+	}
+
+	if (MessageType == TEXT("swui:devBundleDetected"))
+	{
+		UE_LOG(LogSwuiRuntime, Warning, TEXT("=========================================================================================="));
+		UE_LOG(LogSwuiRuntime, Warning, TEXT("[SWUI WARNING] Development web bundle detected in CEF view (%s)!"), *DefaultURL);
+		UE_LOG(LogSwuiRuntime, Warning, TEXT("Running development bundles in Unreal Engine increases CPU/GPU overhead and can cause hitches."));
+		UE_LOG(LogSwuiRuntime, Warning, TEXT("For optimal performance, build production static assets using `swui build --production` or `npm run build`."));
+		UE_LOG(LogSwuiRuntime, Warning, TEXT("=========================================================================================="));
 		return true;
 	}
 

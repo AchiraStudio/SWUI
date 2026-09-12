@@ -1,0 +1,15 @@
+{
+  "name": "game-ui-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SWUI 3.0 Multi-Document UI Monorepo Template",
+  "scripts": {
+    "build": "npm run --workspaces build",
+    "dev:hud": "npm run --workspace=apps/hud dev",
+    "dev:inventory": "npm run --workspace=apps/inventory dev"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

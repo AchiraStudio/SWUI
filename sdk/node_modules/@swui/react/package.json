@@ -1,0 +1,30 @@
+{
+  "name": "@swui/react",
+  "version": "3.0.0",
+  "description": "React integration and custom hooks for SWUI 3.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@swui/core": "^3.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=17.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "react": "^18.3.0",
+    "typescript": "^5.9.3"
+  }
+}

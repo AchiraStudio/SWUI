@@ -1,0 +1,16 @@
+{
+  "name": "swui-sdk-monorepo",
+  "version": "3.0.0",
+  "private": true,
+  "description": "SWUI 3.0 Web Application Runtime SDK Monorepo",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run --workspaces build",
+    "test": "npm run --workspaces test --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

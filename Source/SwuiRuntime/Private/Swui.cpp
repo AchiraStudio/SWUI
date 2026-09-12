@@ -2,6 +2,8 @@
 #include "SwuiSubsystem.h"
 #include "SwuiNavigation.h"
 #include "SwuiTypes.h"
+#include "SwuiDocumentAsset.h"
+#include "SwuiDocumentManagerSubsystem.h"
 #include "ISwuiRuntime.h"
 #include "GameFramework/Actor.h"
 #include "Engine/Engine.h"
@@ -9,6 +11,25 @@
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
 #include "TimerManager.h"
+
+USwuiDocument* USwui::GetManagedDocument() const
+{
+	if (!DocumentAsset)
+	{
+		return nullptr;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World) return nullptr;
+	UGameInstance* GI = World->GetGameInstance();
+	if (!GI) return nullptr;
+
+	USwuiDocumentManagerSubsystem* DocManager = GI->GetSubsystem<USwuiDocumentManagerSubsystem>();
+	if (!DocManager) return nullptr;
+
+	const FName DocId = DocumentAsset->DocumentId.IsNone() ? DocumentAsset->GetFName() : DocumentAsset->DocumentId;
+	return DocManager->GetDocument(DocId);
+}
 
 void USwui::EnsureOwnerBindingSource()
 {
@@ -156,14 +177,34 @@ void USwui::InitializeSwuiView()
 	InstSettings.bShowSwuiDirtyRects                  = DirtyUploadSettings.bShowSwuiDirtyRects;
 	InstSettings.HudRoiSettings                       = HudRoiSettings;
 
+	if (DocumentAsset)
+	{
+		if (USwuiDocumentManagerSubsystem* DocManager = GI->GetSubsystem<USwuiDocumentManagerSubsystem>())
+		{
+			USwuiDocument* Doc = DocManager->RegisterDocumentAsset(DocumentAsset);
+			if (Doc)
+			{
+				Doc->SetOwningActor(GetOwner());
+				if (bIsHUD || DocumentAsset->Layer == ESwuiDocumentLayer::Persistent || DocumentAsset->LoadBehavior == ESwuiDocumentLoadBehavior::Eager)
+				{
+					Doc->Activate(ZOrder);
+				}
+			}
+		}
+	}
+
+	const FString EffectiveDefaultURI = (DefaultURI.IsEmpty() && DocumentAsset)
+		? DocumentAsset->EntryURL
+		: DefaultURI;
+
 	// If a main menu request was cached before the view existed, load MainMenuURI
 	// directly to avoid loading/flashing hud.html before navigating away.
 	const FString InitURI = (bHasPendingMainMenu && bPendingMainMenuEnabled && !MainMenuURI.IsEmpty())
 		? MainMenuURI
-		: DefaultURI;
+		: EffectiveDefaultURI;
 
 	UE_LOG(LogSwuiRuntime, Log, TEXT("[SWUI] InitURI=%s (Default=%s MainMenu=%s bPending=%d)"),
-		*InitURI, *DefaultURI, *MainMenuURI, bHasPendingMainMenu ? 1 : 0);
+		*InitURI, *EffectiveDefaultURI, *MainMenuURI, bHasPendingMainMenu ? 1 : 0);
 
 	Sub->InitRenderer(InitURI, InterfaceName, GetOwner(), bIsHUD,
 		ViewWidth, ViewHeight, ZOrder, BaseMaterial, TextureParameterName, InstSettings);

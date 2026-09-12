@@ -1,0 +1,25 @@
+{
+  "name": "@swui/cli",
+  "version": "3.0.0",
+  "description": "SWUI 3.0 Build and Development CLI Tool for Unreal Engine Web Applications",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "swui": "./bin/swui.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

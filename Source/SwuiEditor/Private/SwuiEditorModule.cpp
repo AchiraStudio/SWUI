@@ -13,6 +13,8 @@
 #include "Editor.h"
 
 #include "Swui.h"
+#include "SwuiDocumentAsset.h"
+#include "SwuiDocumentDetails.h"
 #include "SwuiNavigation.h"
 #include "SwuiDetails.h"
 #include "SwuiNavigationDetails.h"
@@ -52,6 +54,10 @@ public:
 		PropertyModule.RegisterCustomClassLayout(
 			USwuiNavigation::StaticClass()->GetFName(),
 			FOnGetDetailCustomizationInstance::CreateStatic(&FSwuiNavigationDetails::MakeInstance));
+
+		PropertyModule.RegisterCustomClassLayout(
+			USwuiDocumentAsset::StaticClass()->GetFName(),
+			FOnGetDetailCustomizationInstance::CreateStatic(&FSwuiDocumentDetails::MakeInstance));
 
 		UToolMenus::RegisterStartupCallback(
 			FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FSwuiEditorModule::RegisterMenus));
@@ -105,6 +111,7 @@ public:
 				FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
 			PropertyModule.UnregisterCustomClassLayout(USwui::StaticClass()->GetFName());
 			PropertyModule.UnregisterCustomClassLayout(USwuiNavigation::StaticClass()->GetFName());
+			PropertyModule.UnregisterCustomClassLayout(USwuiDocumentAsset::StaticClass()->GetFName());
 		}
 
 	}
