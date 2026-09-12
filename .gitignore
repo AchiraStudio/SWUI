@@ -1,9 +1,189 @@
-# Compiled source files for the engine to use
-Intermediate/*
-Binaries/*
-ThirdParty/cef/Win/*
-Build/*
-Saved/*
-DerivedDataCache/*
+# =============================================================================
+# SWUI — Comprehensive Git Ignore
+# Optimized to save clone, fetch, and push bandwidth
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. Unreal Engine Build & Intermediate Artifacts
+# -----------------------------------------------------------------------------
+Binaries/
+**/Binaries/
+Intermediate/
+**/Intermediate/
+Build/
+**/Build/
+Saved/
+**/Saved/
+DerivedDataCache/
+**/DerivedDataCache/
+
+# C++ Compiler & Linker Outputs
+*.obj
+*.o
+*.lib
+*.a
+*.dylib
+*.dll
+*.so
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.pch
+*.gch
+*.response
+*.target
+*.modules
+*.version
+
+# Packaging & Cooked Staging Outputs
+Package/
+**/Package/
+Packaged/
+**/Packaged/
+Staging/
+**/Staging/
+CrashReportClient/
+
+# -----------------------------------------------------------------------------
+# 2. ThirdParty & Large Chromium / CEF Binaries (Saves Multiple Gigabytes)
+# -----------------------------------------------------------------------------
+# Ignore all downloaded/extracted CEF binaries and symbols
+ThirdParty/cef/*
+!ThirdParty/cef/.gitkeep
+
+# Large Archives & Downloads
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.7z
+*.rar
+
+# -----------------------------------------------------------------------------
+# 3. Node.js, Web SDK & Frontend Framework Build Artifacts
+# -----------------------------------------------------------------------------
+# Dependencies (Saves hundreds of MBs and tens of thousands of files)
+node_modules/
+**/node_modules/
+.pnpm-store/
+**/.pnpm-store/
+
+# Build Distributions
+dist/
+**/dist/
+out/
+**/out/
+build/
+**/build/
+
+# Framework Caches
+.next/
+**/.next/
+.nuxt/
+**/.nuxt/
+.svelte-kit/
+**/.svelte-kit/
+.turbo/
+**/.turbo/
+.parcel-cache/
+**/.parcel-cache/
+.cache/
+**/.cache/
+
+# TypeScript & Linter Caches
+*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+.eslintcache
+
+# Logs & Debugging
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test Coverage
+coverage/
+**/coverage/
+
+# -----------------------------------------------------------------------------
+# 4. IDEs, Compilers & Editor Configuration
+# -----------------------------------------------------------------------------
+# Visual Studio
+.vs/
+**/.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.vcxproj.vspscc
+*.suo
+*.user
+*.userosv
+*.sln.docstates
+*.opendb
+*.db
+*.VC.db
+*.VC.opendb
+
+# Visual Studio Code (Allow settings/extensions recommendations if desired)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (Rider, CLion, WebStorm)
+.idea/
+**/.idea/
+*.sln.iml
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+
+# Generic Editors & Backups
+*~
+*.swp
+*.swo
+*.bak
+*.orig
+
+# -----------------------------------------------------------------------------
+# 5. Operating System Artifacts
+# -----------------------------------------------------------------------------
+# Windows
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+.directory
+
+# -----------------------------------------------------------------------------
+# 6. Logs, Dumps & Crash Reports
+# -----------------------------------------------------------------------------
+*.log
+*.dmp
+*.crash
+*.stackdump
+*.memdump
+
+# -----------------------------------------------------------------------------
+# 7. Local Testing & Developer Scripts
+# -----------------------------------------------------------------------------
 build-loop.ps1
 sample_webui_plugin_trial/
+*.local.json
+*.local.ts
+*.local.js
