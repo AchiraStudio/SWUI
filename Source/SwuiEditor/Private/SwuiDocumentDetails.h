@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "IDetailCustomization.h"
 #include "UObject/WeakObjectPtr.h"
+#include "Input/Reply.h"
 
 class USwuiDocumentAsset;
 class IDetailLayoutBuilder;

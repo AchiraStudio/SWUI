@@ -94,10 +94,10 @@ USwuiDocument* USwuiDocumentManagerSubsystem::RegisterDocumentAsset(USwuiDocumen
 	}
 
 	const FName DocId = Asset->DocumentId.IsNone() ? Asset->GetFName() : Asset->DocumentId;
-	if (USwuiDocument** Existing = Documents.Find(DocId))
+	if (const TObjectPtr<USwuiDocument>* Existing = Documents.Find(DocId))
 	{
 		(*Existing)->InitializeFromAsset(Asset);
-		return *Existing;
+		return Existing->Get();
 	}
 
 	USwuiDocument* NewDoc = NewObject<USwuiDocument>(this);
@@ -120,10 +120,10 @@ USwuiDocument* USwuiDocumentManagerSubsystem::RegisterDocumentManual(FName Docum
 		return nullptr;
 	}
 
-	if (USwuiDocument** Existing = Documents.Find(DocumentId))
+	if (const TObjectPtr<USwuiDocument>* Existing = Documents.Find(DocumentId))
 	{
 		(*Existing)->InitializeManual(DocumentId, EntryURL, Layer, Width, Height);
-		return *Existing;
+		return Existing->Get();
 	}
 
 	USwuiDocument* NewDoc = NewObject<USwuiDocument>(this);
@@ -246,7 +246,14 @@ USwuiDocument* USwuiDocumentManagerSubsystem::GetDocument(FName DocumentId) cons
 TArray<USwuiDocument*> USwuiDocumentManagerSubsystem::GetAllDocuments() const
 {
 	TArray<USwuiDocument*> Result;
-	Documents.GenerateValueArray(Result);
+	Result.Reserve(Documents.Num());
+	for (const auto& Kvp : Documents)
+	{
+		if (Kvp.Value)
+		{
+			Result.Add(Kvp.Value.Get());
+		}
+	}
 	return Result;
 }
 
