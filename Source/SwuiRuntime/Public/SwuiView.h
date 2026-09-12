@@ -58,6 +58,10 @@ public:
 	void Init(const FSwuiInstanceSettings& InInstanceSettings = FSwuiInstanceSettings{});
 	virtual void BeginDestroy() override;
 
+	/** Explicit synchronous shutdown of CEF browser, GPU shared textures, and render targets. */
+	void Shutdown();
+	bool IsShutdown() const { return bIsShutdown; }
+
 	int32 GetWindowlessFrameRate() const { return WindowlessFrameRate; }
 
 	// UI Frame Scheduler & Sleep/Wake access
@@ -303,6 +307,7 @@ private:
 
 	ESwuiRenderingMode ResolvedRenderingMode = ESwuiRenderingMode::CpuCompatible;
 	TSharedPtr<FSwuiGpuSharedTextureHelper> GpuHelper;
+	bool bIsShutdown = false;
 
 	// ---- Pointer input ----
 

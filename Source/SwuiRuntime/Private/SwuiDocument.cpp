@@ -1,5 +1,6 @@
 #include "SwuiDocument.h"
 #include "SwuiDocumentAsset.h"
+#include "SwuiDocumentManagerSubsystem.h"
 #include "SwuiView.h"
 #include "Swui.h" // for USwuiWidget
 #include "Engine/World.h"
@@ -221,6 +222,16 @@ bool USwuiDocument::Activate(int32 OverrideZOrder)
 	}
 
 	SetState(ESwuiDocumentState::Active);
+
+	if (USwuiDocumentManagerSubsystem* DocMgr = GetTypedOuter<USwuiDocumentManagerSubsystem>())
+	{
+		const TMap<FString, FString> Snapshot = DocMgr->GetStateSnapshot();
+		if (!Snapshot.IsEmpty())
+		{
+			PushStateBatch(Snapshot);
+		}
+	}
+
 	return true;
 }
 
@@ -278,7 +289,12 @@ void USwuiDocument::Unload()
 		Widget->RemoveFromParent();
 	}
 	Widget = nullptr;
-	View = nullptr;
+
+	if (View)
+	{
+		View->Shutdown();
+		View = nullptr;
+	}
 
 	SetState(ESwuiDocumentState::Unloaded);
 }
@@ -339,7 +355,7 @@ void USwuiDocument::PushStateBatch(const TMap<FString, FString>& StateBatch)
 		TEXT("(function(){")
 		TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
 		TEXT("var u=%s;")
-		TEXT("if(s._batch){s._batch(u);}else{for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);}}")
+		TEXT("if(s._batch){s._batch(u);}else{for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);document.dispatchEvent(new CustomEvent('swui:stateChange',{detail:{key:k,value:u[k]}}));}}")
 		TEXT("})()"),
 		*BatchJson
 	);

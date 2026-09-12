@@ -14,6 +14,7 @@ class USwuiSubsystem;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSwuiDocumentRegistered, USwuiDocument*, Document);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSwuiDocumentUnregistered, FName, DocumentId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSwuiStateChangedNotification, const FString&, Key, const FString&, JsonValue);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnSwuiDocumentManagerNavigationEvent, USwuiDocument*, Document, FGameplayTag, EventTag, const FString&, PayloadJson);
 
 /**
  * USwuiDocumentManagerSubsystem — Central coordinator for SWUI 3.0 Multi-Document UI.
@@ -130,6 +131,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category="SWUI|StateBus")
 	void BroadcastEvent(FGameplayTag EventTag, const FString& JsonPayload);
 
+	// ---- Navigation & Input Routing ----
+
+	/** Dispatches a navigation event originating from JavaScript to subscribed listeners. */
+	void DispatchNavigationEventFromJs(USwuiDocument* Document, FGameplayTag EventTag, const FString& PayloadJson);
+
+	/** Flushes any buffered dirty state keys to documents and legacy subsystem. */
+	UFUNCTION(BlueprintCallable, Category="SWUI|StateBus")
+	void FlushStateBatch();
+
+	/**
+	 * Queries registered documents in descending Z-order to find the topmost interactive
+	 * USwuiView covering the given screen position. Used by input preprocessors.
+	 */
+	USwuiView* GetTopInteractiveViewAt(const FVector2D& ScreenPosition) const;
+
+	/**
+	 * Returns the USwuiView that currently has text input focus, or the topmost interactive view.
+	 * Used for keyboard event routing.
+	 */
+	USwuiView* GetFocusedOrTopInteractiveView() const;
+
 	// ---- Backward Compatibility / Legacy Subsystem Access ----
 
 	/** Retrieves the legacy USwuiSubsystem instance. */
@@ -147,6 +169,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="SWUI|DocumentManager")
 	FOnSwuiStateChangedNotification OnGlobalStateChanged;
 
+	UPROPERTY(BlueprintAssignable, Category="SWUI|DocumentManager")
+	FOnSwuiDocumentManagerNavigationEvent OnNavigationEvent;
+
 protected:
 	void OnWorldPreFinishDestroy(UWorld* World);
 
@@ -155,6 +180,7 @@ private:
 	TMap<FName, TObjectPtr<USwuiDocument>> Documents;
 
 	TMap<FString, FString> GlobalStateSnapshot;
+	TMap<FString, FString> PendingDirtyState;
 
 	FDelegateHandle WorldDestroyDelegateHandle;
 };

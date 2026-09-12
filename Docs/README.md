@@ -1,15 +1,14 @@
-# SimpleWebUI (SWUI) — Internal Docs
+# SWUI Documentation
 
-## Four major data paths
+## SWUI 3.0 Guides & Architecture (Current)
 
-1. **UE observed state → React**: `UPROPERTY(BlueprintReadOnly)` values are synced to the browser via `window.__SWUI__.state["ns.PropName"] = value` every tick. See usage/observed-state.md.
-2. **UE delegates → React events**: `UPROPERTY(BlueprintAssignable)` delegates fire JS `CustomEvent`s when broadcast. See architecture/delegate-payloads.md.
-3. **React navigation events → UE**: GameplayTag + typed payload → JSON transport → UE receives via `USwuiNavigation`. See architecture/navigation-events.md and usage/typed-navigation-payloads.md.
-4. **React/CEF input → UE**: Slate keyboard events forwarded to CEF via `CefBrowserHost::SendKeyEvent()`. See architecture/cef-input-forwarding.md and usage/react-input-fields.md.
+- [**SWUI 3.0 Getting Started Guide**](SWUI_3_0_GETTING_STARTED.md) — 5-minute quickstart for Vanilla HTML/CSS and Modern Frameworks (React, Vue, Svelte), core mental model, document layers, and lifecycle states.
+- [**SWUI 3.0 Systems & Runtime Architecture**](SWUI_3_0_SYSTEMS_AND_ARCHITECTURE.md) — Deep dive into GPU shared texture rendering, external begin-frames, state bus atomic batching, multi-document Z-order hit-testing, and deterministic memory shutdown.
+- [**SWUI 3.0 Recipes, Workflows & Practical Guides**](SWUI_3_0_RECIPES_AND_WORKFLOWS.md) — Production recipes: Gameplay HUD + Modal Inventory, zero-stutter background preloading, pause menus with game pausing, actor component facades, and troubleshooting.
 
-## Core principle
+---
 
-**Unreal reflection is the source of truth.** Generated TypeScript mirrors Unreal state, delegates, and navigation payload schemas. JSON is internal transport only.
+## Legacy Reference & Architecture (v2.x Foundations)
 
 ## Directory map
 

@@ -1,6 +1,8 @@
 #include "SwuiInputPreprocessor.h"
 #include "SwuiSubsystem.h"
+#include "SwuiDocumentManagerSubsystem.h"
 #include "SwuiView.h"
+#include "Engine/GameInstance.h"
 #include "Input/Events.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSwuiInputPreprocessor, Log, All);
@@ -10,22 +12,65 @@ FSwuiInputPreprocessor::FSwuiInputPreprocessor(USwuiSubsystem* InSubsystem)
 {
 }
 
+static USwuiView* ResolveTargetPointerView(const USwuiSubsystem* Subsystem, const FVector2D& ScreenPos)
+{
+	if (Subsystem)
+	{
+		if (const UGameInstance* GI = Subsystem->GetGameInstance())
+		{
+			if (const USwuiDocumentManagerSubsystem* DocMgr = GI->GetSubsystem<USwuiDocumentManagerSubsystem>())
+			{
+				if (USwuiView* DocView = DocMgr->GetTopInteractiveViewAt(ScreenPos))
+				{
+					return DocView;
+				}
+			}
+		}
+
+		if (USwuiView* LegacyView = Subsystem->GetActiveView())
+		{
+			if (LegacyView->IsPointerInputEnabled() && LegacyView->HasBrowserHost())
+			{
+				int32 BX = 0, BY = 0;
+				if (LegacyView->ScreenToBrowserPixel(ScreenPos, BX, BY))
+				{
+					return LegacyView;
+				}
+			}
+		}
+	}
+	return nullptr;
+}
+
+static USwuiView* ResolveTargetKeyboardView(const USwuiSubsystem* Subsystem)
+{
+	if (Subsystem)
+	{
+		if (const UGameInstance* GI = Subsystem->GetGameInstance())
+		{
+			if (const USwuiDocumentManagerSubsystem* DocMgr = GI->GetSubsystem<USwuiDocumentManagerSubsystem>())
+			{
+				if (USwuiView* FocusedView = DocMgr->GetFocusedOrTopInteractiveView())
+				{
+					return FocusedView;
+				}
+			}
+		}
+
+		if (USwuiView* LegacyView = Subsystem->GetActiveView())
+		{
+			if (LegacyView->IsPointerInputEnabled() && LegacyView->HasBrowserHost())
+			{
+				return LegacyView;
+			}
+		}
+	}
+	return nullptr;
+}
+
 bool FSwuiInputPreprocessor::ShouldForwardEvent(const FPointerEvent& MouseEvent) const
 {
-	USwuiSubsystem* Sub = Subsystem.Get();
-	if (!Sub) return false;
-
-	USwuiView* View = Sub->GetActiveView();
-	if (!View) return false;
-
-	if (!View->IsPointerInputEnabled()) return false;
-
-	if (!View->HasBrowserHost()) return false;
-
-	int32 BrowserX = 0, BrowserY = 0;
-	if (!View->ScreenToBrowserPixel(MouseEvent.GetScreenSpacePosition(), BrowserX, BrowserY)) return false;
-
-	return true;
+	return ResolveTargetPointerView(Subsystem.Get(), MouseEvent.GetScreenSpacePosition()) != nullptr;
 }
 
 void FSwuiInputPreprocessor::UpdateInteractionTime() const
@@ -38,17 +83,16 @@ void FSwuiInputPreprocessor::UpdateInteractionTime() const
 
 bool FSwuiInputPreprocessor::HandleMouseMoveEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent)
 {
-	if (!ShouldForwardEvent(MouseEvent)) return false;
-
 	USwuiSubsystem* Sub = Subsystem.Get();
-	USwuiView* View = Sub->GetActiveView();
+	USwuiView* View = ResolveTargetPointerView(Sub, MouseEvent.GetScreenSpacePosition());
+	if (!View) return false;
 
 	const bool bForwarded = View->ForwardMouseMoveToBrowser(MouseEvent.GetScreenSpacePosition());
 	if (!bForwarded) return false;
 
 	UpdateInteractionTime();
 
-	if (Sub->IsInputDebugLoggingEnabled())
+	if (Sub && Sub->IsInputDebugLoggingEnabled())
 	{
 		const FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
 		UE_LOG(LogSwuiInputPreprocessor, Log, TEXT("[SwuiPreprocessor] MouseMove forwarded: (%.0f, %.0f)"),
@@ -60,10 +104,9 @@ bool FSwuiInputPreprocessor::HandleMouseMoveEvent(FSlateApplication& SlateApp, c
 
 bool FSwuiInputPreprocessor::HandleMouseButtonDownEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent)
 {
-	if (!ShouldForwardEvent(MouseEvent)) return false;
-
 	USwuiSubsystem* Sub = Subsystem.Get();
-	USwuiView* View = Sub->GetActiveView();
+	USwuiView* View = ResolveTargetPointerView(Sub, MouseEvent.GetScreenSpacePosition());
+	if (!View) return false;
 
 	const bool bForwarded = View->ForwardMouseButtonToBrowser(
 		MouseEvent.GetScreenSpacePosition(),
@@ -74,7 +117,7 @@ bool FSwuiInputPreprocessor::HandleMouseButtonDownEvent(FSlateApplication& Slate
 
 	UpdateInteractionTime();
 
-	if (Sub->IsInputDebugLoggingEnabled())
+	if (Sub && Sub->IsInputDebugLoggingEnabled())
 	{
 		const FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
 		UE_LOG(LogSwuiInputPreprocessor, Log, TEXT("[SwuiPreprocessor] MouseButton Down: key=%s  (%.0f, %.0f)"),
@@ -86,10 +129,9 @@ bool FSwuiInputPreprocessor::HandleMouseButtonDownEvent(FSlateApplication& Slate
 
 bool FSwuiInputPreprocessor::HandleMouseButtonUpEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent)
 {
-	if (!ShouldForwardEvent(MouseEvent)) return false;
-
 	USwuiSubsystem* Sub = Subsystem.Get();
-	USwuiView* View = Sub->GetActiveView();
+	USwuiView* View = ResolveTargetPointerView(Sub, MouseEvent.GetScreenSpacePosition());
+	if (!View) return false;
 
 	const bool bForwarded = View->ForwardMouseButtonToBrowser(
 		MouseEvent.GetScreenSpacePosition(),
@@ -100,7 +142,7 @@ bool FSwuiInputPreprocessor::HandleMouseButtonUpEvent(FSlateApplication& SlateAp
 
 	UpdateInteractionTime();
 
-	if (Sub->IsInputDebugLoggingEnabled())
+	if (Sub && Sub->IsInputDebugLoggingEnabled())
 	{
 		const FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
 		UE_LOG(LogSwuiInputPreprocessor, Log, TEXT("[SwuiPreprocessor] MouseButton Up: key=%s  (%.0f, %.0f)"),
@@ -112,10 +154,9 @@ bool FSwuiInputPreprocessor::HandleMouseButtonUpEvent(FSlateApplication& SlateAp
 
 bool FSwuiInputPreprocessor::HandleMouseWheelOrGestureEvent(FSlateApplication& SlateApp, const FPointerEvent& InWheelEvent, const FPointerEvent* InGestureEvent)
 {
-	if (!ShouldForwardEvent(InWheelEvent)) return false;
-
 	USwuiSubsystem* Sub = Subsystem.Get();
-	USwuiView* View = Sub->GetActiveView();
+	USwuiView* View = ResolveTargetPointerView(Sub, InWheelEvent.GetScreenSpacePosition());
+	if (!View) return false;
 
 	const float WheelDelta = InWheelEvent.GetWheelDelta();
 	if (FMath::IsNearlyZero(WheelDelta)) return false;
@@ -128,7 +169,7 @@ bool FSwuiInputPreprocessor::HandleMouseWheelOrGestureEvent(FSlateApplication& S
 
 	UpdateInteractionTime();
 
-	if (Sub->IsInputDebugLoggingEnabled())
+	if (Sub && Sub->IsInputDebugLoggingEnabled())
 	{
 		const FVector2D ScreenPos = InWheelEvent.GetScreenSpacePosition();
 		UE_LOG(LogSwuiInputPreprocessor, Log, TEXT("[SwuiPreprocessor] Wheel: delta=%.1f  (%.0f, %.0f)"),
@@ -143,13 +184,7 @@ bool FSwuiInputPreprocessor::HandleMouseWheelOrGestureEvent(FSlateApplication& S
 // Identical conditions to mouse forwarding — keyboard follows the same on/off.
 bool FSwuiInputPreprocessor::ShouldForwardKeyboard() const
 {
-	USwuiSubsystem* Sub = Subsystem.Get();
-	if (!Sub) return false;
-	USwuiView* View = Sub->GetActiveView();
-	if (!View) return false;
-	if (!View->IsPointerInputEnabled()) return false;
-	if (!View->HasBrowserHost()) return false;
-	return true;
+	return ResolveTargetKeyboardView(Subsystem.Get()) != nullptr;
 }
 
 // IInputProcessor exposes HandleKeyDownEvent and HandleKeyUpEvent but NOT
@@ -161,10 +196,8 @@ bool FSwuiInputPreprocessor::ShouldForwardKeyboard() const
 // text — CEF has no other path to know what character was typed.
 bool FSwuiInputPreprocessor::HandleKeyDownEvent(FSlateApplication& SlateApp, const FKeyEvent& InKeyEvent)
 {
-	if (!ShouldForwardKeyboard()) return false;
-
-	USwuiSubsystem* Sub = Subsystem.Get();
-	USwuiView* View = Sub->GetActiveView();
+	USwuiView* View = ResolveTargetKeyboardView(Subsystem.Get());
+	if (!View) return false;
 
 	// Send KEYEVENT_KEYDOWN to CEF.
 	View->ForwardKeyEventToBrowser(InKeyEvent, false);
@@ -206,10 +239,8 @@ bool FSwuiInputPreprocessor::HandleKeyDownEvent(FSlateApplication& SlateApp, con
 
 bool FSwuiInputPreprocessor::HandleKeyUpEvent(FSlateApplication& SlateApp, const FKeyEvent& InKeyEvent)
 {
-	if (!ShouldForwardKeyboard()) return false;
-
-	USwuiSubsystem* Sub = Subsystem.Get();
-	USwuiView* View = Sub->GetActiveView();
+	USwuiView* View = ResolveTargetKeyboardView(Subsystem.Get());
+	if (!View) return false;
 
 	View->ForwardKeyEventToBrowser(InKeyEvent, true);
 
@@ -219,10 +250,9 @@ bool FSwuiInputPreprocessor::HandleKeyUpEvent(FSlateApplication& SlateApp, const
 
 bool FSwuiInputPreprocessor::HandleMouseButtonDoubleClickEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent)
 {
-	if (!ShouldForwardEvent(MouseEvent)) return false;
-
 	USwuiSubsystem* Sub = Subsystem.Get();
-	USwuiView* View = Sub->GetActiveView();
+	USwuiView* View = ResolveTargetPointerView(Sub, MouseEvent.GetScreenSpacePosition());
+	if (!View) return false;
 
 	const bool bForwarded = View->ForwardMouseButtonToBrowser(
 		MouseEvent.GetScreenSpacePosition(),
@@ -233,7 +263,7 @@ bool FSwuiInputPreprocessor::HandleMouseButtonDoubleClickEvent(FSlateApplication
 
 	UpdateInteractionTime();
 
-	if (Sub->IsInputDebugLoggingEnabled())
+	if (Sub && Sub->IsInputDebugLoggingEnabled())
 	{
 		const FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
 		UE_LOG(LogSwuiInputPreprocessor, Log, TEXT("[SwuiPreprocessor] DoubleClick: key=%s  (%.0f, %.0f)"),

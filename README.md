@@ -8,6 +8,13 @@ Build HUDs, menus, overlays, and interactive game UI with browser technologies s
 
 SWUI keeps gameplay state, events, and input wiring inside Unreal while letting the visual UI layer live in a web runtime.
 
+## 📚 SWUI 3.0 Documentation
+
+- [**Getting Started Guide**](Docs/SWUI_3_0_GETTING_STARTED.md) — 5-minute quickstart for Vanilla HTML/CSS and Modern Frameworks (React, Vue, Svelte).
+- [**Systems & Architecture**](Docs/SWUI_3_0_SYSTEMS_AND_ARCHITECTURE.md) — Multi-Document Engine, GPU Shared Textures, Frame Pacing, and State Bus.
+- [**Recipes & Practical Workflows**](Docs/SWUI_3_0_RECIPES_AND_WORKFLOWS.md) — HUD + Inventory, Background Preloading, Pause Menus, and Profiling.
+- [**Vanilla HTML/CSS Starter Template**](templates/vanilla-html/) — Zero-dependency multi-document example.
+
 ## Why SWUI?
 
 Unreal UI work often needs a lot of glue:

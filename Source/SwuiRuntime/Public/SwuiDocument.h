@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
 #include "SwuiTypes.h"
+#include "GameplayTagContainer.h"
 #include "SwuiDocument.generated.h"
 
 class USwuiView;
@@ -13,6 +14,7 @@ class AActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSwuiDocumentStateChanged, class USwuiDocument*, Document, ESwuiDocumentState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSwuiDocumentLoaded, class USwuiDocument*, Document);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnSwuiDocumentNavigationEvent, class USwuiDocument*, Document, FGameplayTag, EventTag, const FString&, PayloadJson);
 
 /**
  * USwuiDocument — SWUI 3.0 runtime representation of an active or managed web document.
@@ -118,6 +120,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category="SWUI|Document")
 	FOnSwuiDocumentLoaded OnLoaded;
+
+	UPROPERTY(BlueprintAssignable, Category="SWUI|Document")
+	FOnSwuiDocumentNavigationEvent OnNavigationEvent;
 
 protected:
 	void SetState(ESwuiDocumentState NewState);

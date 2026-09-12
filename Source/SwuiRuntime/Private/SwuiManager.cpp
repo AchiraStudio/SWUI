@@ -79,6 +79,8 @@ void SwuiManager::OnBeforeCommandLineProcessing(const CefString& process_type,
 
 }
 
+static uint64 LastPumpedFrameCounter = MAX_uint64;
+
 void SwuiManager::DoSwuiMessageLoop()
 {
 	CefDoMessageLoopWork();
@@ -86,6 +88,11 @@ void SwuiManager::DoSwuiMessageLoop()
 
 bool SwuiManager::DoSwuiMessageLoopBudgeted(double MaxSeconds)
 {
+	if (GFrameCounter == LastPumpedFrameCounter)
+	{
+		return true;
+	}
+	LastPumpedFrameCounter = GFrameCounter;
 	CefDoMessageLoopWork();
 	return true;
 }

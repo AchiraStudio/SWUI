@@ -2,6 +2,9 @@
 #include "SwuiSubsystem.h"
 #include "SwuiSettings.h"
 #include "SwuiView.h"
+#include "SwuiCVars.h"
+#include "SwuiManager.h"
+#include "SwuiProfiler.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 
@@ -38,13 +41,49 @@ void USwuiDocumentManagerSubsystem::Deinitialize()
 	}
 	Documents.Empty();
 	GlobalStateSnapshot.Empty();
+	PendingDirtyState.Empty();
 
 	Super::Deinitialize();
 }
 
 void USwuiDocumentManagerSubsystem::Tick(float DeltaTime)
 {
-	// Reserved for multi-document scheduler synchronization and per-document budgeting
+	SWUI_PROFILE_SCOPE(GameThreadTotal);
+
+	// 1. Primary CEF message loop pumping within bounded time budget
+	const float CefBudgetMs = CVarSwuiCefMessageLoopBudgetMs.GetValueOnGameThread();
+	const double CefBudgetSec = (CefBudgetMs > 0.f) ? (static_cast<double>(CefBudgetMs) * 0.001) : 0.0015;
+	{
+		SWUI_PROFILE_SCOPE(CefMessageLoop);
+		SwuiManager::DoSwuiMessageLoopBudgeted(CefBudgetSec);
+	}
+
+	// 2. Atomic state batch flushing to JavaScript DOM/frameworks before visual rendering
+	FlushStateBatch();
+
+	// 3. Drive continuous browser frame + upload/blit latest surface for all active/preloaded documents
+	for (auto& Kvp : Documents)
+	{
+		USwuiDocument* Doc = Kvp.Value;
+		if (!Doc)
+		{
+			continue;
+		}
+
+		USwuiView* View = Doc->GetView();
+		if (!View)
+		{
+			continue;
+		}
+
+		const ESwuiDocumentState DocState = Doc->GetState();
+		if (DocState == ESwuiDocumentState::Active || DocState == ESwuiDocumentState::Preloaded)
+		{
+			View->NotifySubsystemTick();
+			View->SendExternalBeginFrameIfDue(DeltaTime);
+			View->TickDeferredUpload();
+		}
+	}
 }
 
 USwuiDocument* USwuiDocumentManagerSubsystem::RegisterDocumentAsset(USwuiDocumentAsset* Asset)
@@ -232,34 +271,129 @@ bool USwuiDocumentManagerSubsystem::HasDocument(FName DocumentId) const
 void USwuiDocumentManagerSubsystem::SetState(const FString& Key, const FString& JsonValue)
 {
 	GlobalStateSnapshot.Add(Key, JsonValue);
+	PendingDirtyState.Add(Key, JsonValue);
 
-	// Route to all matching registered documents
+	OnGlobalStateChanged.Broadcast(Key, JsonValue);
+}
+
+void USwuiDocumentManagerSubsystem::FlushStateBatch()
+{
+	if (PendingDirtyState.IsEmpty())
+	{
+		return;
+	}
+
 	for (auto& Kvp : Documents)
 	{
 		if (Kvp.Value && (Kvp.Value->GetState() == ESwuiDocumentState::Active || Kvp.Value->GetState() == ESwuiDocumentState::Preloaded))
 		{
-			Kvp.Value->PushState(Key, JsonValue);
+			Kvp.Value->PushStateBatch(PendingDirtyState);
 		}
 	}
 
 	// Side-by-side legacy subsystem support
 	if (USwuiSubsystem* LegacySub = GetLegacySubsystem())
 	{
-		const FString Script = FString::Printf(
-			TEXT("(function(){")
-			TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
-			TEXT("s.state['%s']=%s;")
-			TEXT("if(s._notify)s._notify('%s',%s);")
-			TEXT("document.dispatchEvent(new CustomEvent('swui:stateChange',{detail:{key:'%s',value:%s}}));")
-			TEXT("})()"),
-			*Key, *JsonValue,
-			*Key, *JsonValue,
-			*Key, *JsonValue
-		);
-		LegacySub->ExecuteJavaScript(Script);
+		TArray<FString> FilteredAssignments;
+		for (const auto& Kvp : PendingDirtyState)
+		{
+			FilteredAssignments.Add(FString::Printf(TEXT("\"%s\":%s"), *Kvp.Key, *Kvp.Value));
+		}
+		if (!FilteredAssignments.IsEmpty())
+		{
+			const FString BatchJson = FString::Printf(TEXT("{%s}"), *FString::Join(FilteredAssignments, TEXT(",")));
+			const FString Script = FString::Printf(
+				TEXT("(function(){")
+				TEXT("var s=(window.__SWUI__=window.__SWUI__||{state:{},events:{}});")
+				TEXT("var u=%s;")
+				TEXT("if(s._batch){s._batch(u);}else{for(var k in u){s.state[k]=u[k];if(s._notify)s._notify(k,u[k]);document.dispatchEvent(new CustomEvent('swui:stateChange',{detail:{key:k,value:u[k]}}));}}")
+				TEXT("})()"),
+				*BatchJson
+			);
+			LegacySub->ExecuteJavaScript(Script);
+		}
 	}
 
-	OnGlobalStateChanged.Broadcast(Key, JsonValue);
+	PendingDirtyState.Empty();
+}
+
+void USwuiDocumentManagerSubsystem::DispatchNavigationEventFromJs(USwuiDocument* Document, FGameplayTag EventTag, const FString& PayloadJson)
+{
+	if (Document)
+	{
+		Document->OnNavigationEvent.Broadcast(Document, EventTag, PayloadJson);
+	}
+
+	OnNavigationEvent.Broadcast(Document, EventTag, PayloadJson);
+}
+
+USwuiView* USwuiDocumentManagerSubsystem::GetTopInteractiveViewAt(const FVector2D& ScreenPosition) const
+{
+	USwuiView* BestView = nullptr;
+	int32 HighestZOrder = MIN_int32;
+
+	for (const auto& Kvp : Documents)
+	{
+		const USwuiDocument* Doc = Kvp.Value;
+		if (!Doc || Doc->GetState() != ESwuiDocumentState::Active)
+		{
+			continue;
+		}
+
+		USwuiView* View = Doc->GetView();
+		if (!View || !View->IsPointerInputEnabled() || !View->HasBrowserHost())
+		{
+			continue;
+		}
+
+		int32 BrowserX = 0;
+		int32 BrowserY = 0;
+		if (View->ScreenToBrowserPixel(ScreenPosition, BrowserX, BrowserY))
+		{
+			if (Doc->GetZOrder() >= HighestZOrder)
+			{
+				HighestZOrder = Doc->GetZOrder();
+				BestView = View;
+			}
+		}
+	}
+
+	return BestView;
+}
+
+USwuiView* USwuiDocumentManagerSubsystem::GetFocusedOrTopInteractiveView() const
+{
+	USwuiView* TopInteractiveView = nullptr;
+	int32 HighestZOrder = MIN_int32;
+
+	for (const auto& Kvp : Documents)
+	{
+		const USwuiDocument* Doc = Kvp.Value;
+		if (!Doc || Doc->GetState() != ESwuiDocumentState::Active)
+		{
+			continue;
+		}
+
+		USwuiView* View = Doc->GetView();
+		if (!View || !View->HasBrowserHost())
+		{
+			continue;
+		}
+
+		// Prioritize view that currently has text input focus
+		if (View->IsTextInputFocused())
+		{
+			return View;
+		}
+
+		if (View->IsPointerInputEnabled() && Doc->GetZOrder() >= HighestZOrder)
+		{
+			HighestZOrder = Doc->GetZOrder();
+			TopInteractiveView = View;
+		}
+	}
+
+	return TopInteractiveView;
 }
 
 void USwuiDocumentManagerSubsystem::SetStateString(const FString& Key, const FString& StringValue)

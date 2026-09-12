@@ -35,6 +35,8 @@
 #include "SwuiSubsystem.h"
 #include "SwuiFullSurfaceCpuRenderer.h"
 #include "SwuiSettings.h"
+#include "SwuiDocument.h"
+#include "SwuiDocumentManagerSubsystem.h"
 
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
@@ -403,11 +405,30 @@ ESwuiFrameRateMode USwuiView::GetFrameRateMode() const
 void USwuiView::WakeUI()
 {
 	Scheduler.Wake();
+
+	if (CefData && CefData->Browser)
+	{
+		CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
+		if (Host)
+		{
+			Host->WasHidden(false);
+			Host->Invalidate(PET_VIEW);
+		}
+	}
 }
 
 void USwuiView::SleepUI()
 {
 	Scheduler.Sleep();
+
+	if (CefData && CefData->Browser)
+	{
+		CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
+		if (Host)
+		{
+			Host->WasHidden(true);
+		}
+	}
 }
 
 void USwuiView::LoadURL(const FString& URI)
@@ -491,8 +512,20 @@ void USwuiView::QueuePendingScript(const FString& InScript)
 	PendingScript += InScript;
 }
 
-void USwuiView::ForceCloseBrowserForShutdown()
+void USwuiView::Shutdown()
 {
+	if (bIsShutdown)
+	{
+		return;
+	}
+	bIsShutdown = true;
+
+	if (GpuHelper.IsValid())
+	{
+		GpuHelper->Shutdown();
+		GpuHelper.Reset();
+	}
+
 	if (CefData && CefData->Browser)
 	{
 		CefRefPtr<CefBrowserHost> Host = CefData->Browser->GetHost();
@@ -500,7 +533,17 @@ void USwuiView::ForceCloseBrowserForShutdown()
 		{
 			Host->CloseBrowser(true);
 		}
+		CefData->Browser = nullptr;
+		CefData->Client = nullptr;
 	}
+
+	FullSurfaceRenderer.Reset();
+	DestroyTexture();
+}
+
+void USwuiView::ForceCloseBrowserForShutdown()
+{
+	Shutdown();
 }
 
 void USwuiView::OnBrowserClosed(CefRefPtr<CefBrowser> InBrowser)
@@ -510,6 +553,7 @@ void USwuiView::OnBrowserClosed(CefRefPtr<CefBrowser> InBrowser)
 		if (!InBrowser || CefData->Browser->IsSame(InBrowser))
 		{
 			CefData->Browser = nullptr;
+			CefData->Client = nullptr;
 		}
 	}
 }
@@ -631,25 +675,50 @@ bool USwuiView::HandleIncomingMessage(const FString& MessageJson)
 		*PayloadJson);
 
 	AActor* OwnerActor = ResolveOwningActor();
-	if (!OwnerActor)
+	if (OwnerActor)
 	{
-		UE_LOG(LogSwuiRuntime, Warning,
-			TEXT("[SWUI JS->UE NAV] Message received without an owning actor."));
-		return false;
-	}
+		USwuiNavigation* Navigation = OwnerActor->FindComponentByClass<USwuiNavigation>();
+		if (Navigation)
+		{
+			Navigation->ReceiveNavigationEventFromJs(EventTag, PayloadJson);
+			return true;
+		}
 
-	USwuiNavigation* Navigation = OwnerActor->FindComponentByClass<USwuiNavigation>();
-	if (!Navigation)
-	{
 		UE_LOG(LogSwuiRuntime, Warning,
 			TEXT("[SWUI JS->UE NAV] Actor '%s' has no USwuiNavigation component to handle '%s'."),
 			*OwnerActor->GetName(),
 			*TagName);
-		return false;
 	}
 
-	Navigation->ReceiveNavigationEventFromJs(EventTag, PayloadJson);
-	return true;
+	// Fallback to USwuiDocument and USwuiDocumentManagerSubsystem for multi-document UI
+	if (USwuiDocument* OwningDoc = Cast<USwuiDocument>(GetOuter()))
+	{
+		if (USwuiDocumentManagerSubsystem* DocMgr = OwningDoc->GetTypedOuter<USwuiDocumentManagerSubsystem>())
+		{
+			DocMgr->DispatchNavigationEventFromJs(OwningDoc, EventTag, PayloadJson);
+			return true;
+		}
+
+		OwningDoc->OnNavigationEvent.Broadcast(OwningDoc, EventTag, PayloadJson);
+		return true;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (USwuiDocumentManagerSubsystem* DocMgr = GI->GetSubsystem<USwuiDocumentManagerSubsystem>())
+			{
+				DocMgr->DispatchNavigationEventFromJs(nullptr, EventTag, PayloadJson);
+				return true;
+			}
+		}
+	}
+
+	UE_LOG(LogSwuiRuntime, Warning,
+		TEXT("[SWUI JS->UE NAV] Navigation event '%s' unhandled: no owning actor navigation component or USwuiDocumentManagerSubsystem found."),
+		*TagName);
+	return false;
 }
 
 bool USwuiView::HandleIncomingQuery(const FString& QueryJson, FString& OutResponseJson)
@@ -2545,19 +2614,6 @@ bool USwuiView::ForwardCharToBrowser(TCHAR Char, const FModifierKeysState& Modif
 
 void USwuiView::BeginDestroy()
 {
-	if (GpuHelper.IsValid())
-	{
-		GpuHelper->Shutdown();
-		GpuHelper.Reset();
-	}
-
-	if (CefData && CefData->Browser)
-	{
-		CefData->Browser->GetHost()->CloseBrowser(true);
-	}
-
-	FullSurfaceRenderer.Reset();
-	DestroyTexture();
-
+	Shutdown();
 	Super::BeginDestroy();
 }
