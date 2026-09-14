@@ -65,6 +65,11 @@ void SwuiManager::OnBeforeCommandLineProcessing(const CefString& process_type,
 		{
 			CommandLine->AppendSwitch("disable-web-security");
 		}
+
+#if WITH_EDITOR || !UE_BUILD_SHIPPING
+		// Allow local file:/// scheme to access other local files in CEF
+		CommandLine->AppendSwitch("allow-file-access-from-files");
+#endif
 	}
 
 	CommandLine->AppendSwitchWithValue("enable-blink-features", "HTMLImports");

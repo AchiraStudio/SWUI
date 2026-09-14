@@ -1,4 +1,24 @@
 // Native communication bridge between Unreal Engine and CEF/Chromium
+function sendSwuiUrlBridge(raw) {
+    if (typeof document === 'undefined')
+        return;
+    const encoded = encodeURIComponent(raw);
+    const url = `swui://bus?payload=${encoded}&t=${Date.now()}`;
+    let iframe = document.getElementById('__swui_native_bridge_iframe');
+    if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = '__swui_native_bridge_iframe';
+        iframe.style.display = 'none';
+        iframe.setAttribute('aria-hidden', 'true');
+        document.documentElement.appendChild(iframe);
+    }
+    iframe.src = url;
+    setTimeout(() => {
+        if (iframe) {
+            iframe.src = 'about:blank';
+        }
+    }, 100);
+}
 export function postMessage(message) {
     const json = typeof message === 'string' ? message : JSON.stringify(message);
     if (typeof window !== 'undefined') {
@@ -24,6 +44,7 @@ export function postMessage(message) {
             window.chrome.webview.postMessage(message);
             return;
         }
+        sendSwuiUrlBridge(json);
     }
 }
 export function query(message) {

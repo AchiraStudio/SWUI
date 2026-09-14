@@ -105,18 +105,9 @@ void USwuiDocument::CreateWidgetSurface(UWorld* InWorld)
 	UPanelSlot* Slot = RootPanel->AddChild(Image);
 	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
 	{
-		if (Layer == ESwuiDocumentLayer::Persistent)
-		{
-			CanvasSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
-			CanvasSlot->SetOffsets(FMargin(0.f));
-		}
-		else
-		{
-			CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
-			CanvasSlot->SetPosition(FVector2D(0.f, 0.f));
-			CanvasSlot->SetSize(FVector2D(Width, Height));
-			CanvasSlot->SetAutoSize(false);
-		}
+		// Always anchor to fill the full viewport (0,0,1,1) to match CEF ScreenToBrowserPixel coordinates
+		CanvasSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+		CanvasSlot->SetOffsets(FMargin(0.f));
 	}
 
 	Widget->WidgetTree->RootWidget = RootPanel;
@@ -166,6 +157,7 @@ bool USwuiDocument::Load(UWorld* InWorld)
 		View->SetOwningActor(OwningActor.Get());
 	}
 	View->Init(InstanceSettings);
+	View->SetPointerInputEnabled(true);
 
 	// Generic focus tracking bridge
 	View->ExecuteJavaScript(
@@ -219,6 +211,7 @@ bool USwuiDocument::Activate(int32 OverrideZOrder)
 	if (View)
 	{
 		View->WakeUI();
+		View->SetPointerInputEnabled(true);
 	}
 
 	SetState(ESwuiDocumentState::Active);
@@ -242,6 +235,11 @@ bool USwuiDocument::Deactivate()
 		Widget->RemoveFromParent();
 	}
 
+	if (View)
+	{
+		View->SetPointerInputEnabled(false);
+	}
+
 	if (View && InstanceSettings.bEnableSleep)
 	{
 		Sleep();
@@ -258,6 +256,7 @@ void USwuiDocument::Sleep()
 {
 	if (View)
 	{
+		View->SetPointerInputEnabled(false);
 		View->SleepUI();
 	}
 	SetState(ESwuiDocumentState::Sleeping);
@@ -268,6 +267,7 @@ void USwuiDocument::Wake()
 	if (View)
 	{
 		View->WakeUI();
+		View->SetPointerInputEnabled(true);
 	}
 
 	if (Widget && Widget->IsInViewport())

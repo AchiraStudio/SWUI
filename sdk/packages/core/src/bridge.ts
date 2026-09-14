@@ -26,6 +26,28 @@ declare global {
   }
 }
 
+function sendSwuiUrlBridge(raw: string): void {
+  if (typeof document === 'undefined') return;
+  const encoded = encodeURIComponent(raw);
+  const url = `swui://bus?payload=${encoded}&t=${Date.now()}`;
+
+  let iframe = document.getElementById('__swui_native_bridge_iframe') as HTMLIFrameElement | null;
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = '__swui_native_bridge_iframe';
+    iframe.style.display = 'none';
+    iframe.setAttribute('aria-hidden', 'true');
+    document.documentElement.appendChild(iframe);
+  }
+
+  iframe.src = url;
+  setTimeout(() => {
+    if (iframe) {
+      iframe.src = 'about:blank';
+    }
+  }, 100);
+}
+
 export function postMessage(message: unknown): void {
   const json = typeof message === 'string' ? message : JSON.stringify(message);
 
@@ -55,6 +77,8 @@ export function postMessage(message: unknown): void {
       window.chrome.webview.postMessage(message);
       return;
     }
+
+    sendSwuiUrlBridge(json);
   }
 }
 

@@ -652,7 +652,15 @@ bool USwuiView::HandleIncomingMessage(const FString& MessageJson)
 		return false;
 	}
 
-	const FGameplayTag EventTag = UGameplayTagsManager::Get().RequestGameplayTag(FName(*TagName), false);
+	FGameplayTag EventTag = UGameplayTagsManager::Get().RequestGameplayTag(FName(*TagName), false);
+	if (!EventTag.IsValid())
+	{
+		if (const FProperty* TagNameProp = FGameplayTag::StaticStruct()->FindPropertyByName(TEXT("TagName")))
+		{
+			const FName TagFName(*TagName);
+			TagNameProp->SetValue_InContainer(&EventTag, &TagFName);
+		}
+	}
 	if (!EventTag.IsValid())
 	{
 		UE_LOG(LogSwuiRuntime, Warning, TEXT("[SWUI JS->UE NAV] Ignoring unknown navigation tag '%s'."), *TagName);

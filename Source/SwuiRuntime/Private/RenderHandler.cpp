@@ -168,7 +168,9 @@ void RenderHandler::SetViewSize(int32 NewWidth, int32 NewHeight)
 
 void RenderHandler::OnPaint(CefRefPtr<CefBrowser> Browser, PaintElementType Type, const RectList &DirtyRects, const void *Buffer, int InWidth, int InHeight)
 {
-	if (!RenderTarget || !Buffer)
+	// PET_POPUP is an internal popup element (e.g. native select dropdown).
+	// Only PET_VIEW represents the authoritative full-document surface.
+	if (!RenderTarget || !Buffer || Type != PET_VIEW)
 	{
 		return;
 	}
