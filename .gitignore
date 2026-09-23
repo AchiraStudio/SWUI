@@ -68,6 +68,11 @@ node_modules/
 **/node_modules/
 .pnpm-store/
 **/.pnpm-store/
+.github/
+.kilo/
+.zcode/
+BRIEF/
+builder/
 
 # Build Distributions
 dist/
