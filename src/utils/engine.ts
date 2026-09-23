@@ -94,6 +94,10 @@ export function makeCrosshair(mount: HTMLElement): {
 }
 
 export function observeReveal(root: HTMLElement = document.body) {
+  if (typeof window !== 'undefined' && window.innerWidth <= 1020) {
+    root.querySelectorAll('.rv').forEach(n => n.classList.add('in'))
+    return
+  }
   const io = new IntersectionObserver(
     es =>
       es.forEach(e => {
@@ -102,7 +106,7 @@ export function observeReveal(root: HTMLElement = document.body) {
           io.unobserve(e.target)
         }
       }),
-    { threshold: 0.08 }
+    { threshold: 0.02, rootMargin: '0px 0px 80px 0px' }
   )
   root.querySelectorAll('.rv').forEach(n => (RM ? n.classList.add('in') : io.observe(n)))
 }

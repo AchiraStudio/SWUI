@@ -778,7 +778,7 @@ function initCrosshair(){
     </div>
     <div class="lc-grid rv">
       <div class="plate"><div class="plate-h"><span class="sq"></span>Document state machine<span class="sp"></span><button class="tbtn" id="lcAuto"><svg><use href="#i-play"/></svg> Auto</button></div>
-        <div class="plate-b" style="padding:10px"><div class="lc-field gridbg" id="lcField"><svg id="lcSvg"></svg></div></div>
+        <div class="plate-b" style="padding:10px;overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="lc-field gridbg" id="lcField" style="min-width:580px"><svg id="lcSvg"></svg></div></div>
       </div>
       <div>
         <div class="plate" style="margin-bottom:14px"><div class="plate-h"><span class="sq"></span>Stage — hud.html</div>
@@ -797,8 +797,8 @@ function initCrosshair(){
       <p class="lead">Web documents can be prepared in the background. While the player is still in Level 01, the Level 02 HUD loads its HTML, CSS, scripts and browser context — so activation after preload avoids cold-start work at the moment of use.</p>
     </div>
     <div class="plate rv"><div class="plate-h"><span class="sq"></span>Timeline — level travel<span class="sp"></span><button class="tbtn pri" id="plRun"><svg><use href="#i-play"/></svg> Run sequence</button></div>
-      <div class="plate-b">
-        <div class="pl-rail" id="plRail">
+      <div class="plate-b" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <div class="pl-rail" id="plRail" style="min-width:320px">
           <div class="pl-ph" style="left:8%"><b>Level 01</b><span>hud · active</span></div>
           <div class="pl-ph" style="left:50%"><b>Transition</b><span>level travel</span></div>
           <div class="pl-ph" style="left:92%"><b>Level 02</b><span>preloaded → active</span></div>
