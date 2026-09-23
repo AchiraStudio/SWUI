@@ -11,6 +11,7 @@
 #include "Components/ActorComponent.h"
 #include "GameFramework/Actor.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Texture.h"
@@ -692,8 +693,28 @@ bool USwuiView::HandleIncomingMessage(const FString& MessageJson)
 			return true;
 		}
 
-		UE_LOG(LogSwuiRuntime, Warning,
-			TEXT("[SWUI JS->UE NAV] Actor '%s' has no USwuiNavigation component to handle '%s'."),
+		// Direct dispatch to any component on OwnerActor implementing HandleRawNavigationEvent
+		for (UActorComponent* Comp : OwnerActor->GetComponents())
+		{
+			if (Comp)
+			{
+				UFunction* Func = Comp->FindFunction(TEXT("HandleRawNavigationEvent"));
+				if (Func)
+				{
+					struct FNavParams
+					{
+						FGameplayTag Tag;
+						FString Payload;
+					};
+					FNavParams Params{ EventTag, PayloadJson };
+					Comp->ProcessEvent(Func, &Params);
+					return true;
+				}
+			}
+		}
+
+		UE_LOG(LogSwuiRuntime, Log,
+			TEXT("[SWUI JS->UE NAV] Actor '%s' has no USwuiNavigation component for '%s', dispatching to subsystem."),
 			*OwnerActor->GetName(),
 			*TagName);
 	}
@@ -711,7 +732,13 @@ bool USwuiView::HandleIncomingMessage(const FString& MessageJson)
 		return true;
 	}
 
-	if (UWorld* World = GetWorld())
+	UWorld* World = GetWorld();
+	if (!World && OwnerActor)
+	{
+		World = OwnerActor->GetWorld();
+	}
+
+	if (World)
 	{
 		if (UGameInstance* GI = World->GetGameInstance())
 		{

@@ -28,6 +28,9 @@ static TAutoConsoleVariable<bool> CVarSwuiDebugCommands(
 
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
 #endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogSwuiNavigation, Log, All);
@@ -1046,7 +1049,30 @@ EDataValidationResult USwuiNavigation::IsDataValid(FDataValidationContext& Conte
 	EDataValidationResult Result = Super::IsDataValid(Context);
 
 	AActor* Owner = GetOwner();
-	if (Owner && !Owner->FindComponentByClass<USwui>())
+	bool bHasSwui = false;
+	if (Owner)
+	{
+		bHasSwui = (Owner->FindComponentByClass<USwui>() != nullptr);
+		if (!bHasSwui)
+		{
+			if (const UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Owner->GetClass()))
+			{
+				if (BPGC->SimpleConstructionScript)
+				{
+					for (const USCS_Node* Node : BPGC->SimpleConstructionScript->GetAllNodes())
+					{
+						if (Node && Node->ComponentClass && Node->ComponentClass->IsChildOf(USwui::StaticClass()))
+						{
+							bHasSwui = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if (Owner && !bHasSwui)
 	{
 		Context.AddError(FText::FromString(
 			TEXT("USwuiNavigation requires a sibling USwui component on the same Actor.")));
