@@ -1448,7 +1448,7 @@ void USwuiView::TickDeferredUpload()
 					{
 						const int32 RectPitch = Region.Width * 4;
 						const int32 RectBytes = RectPitch * Region.Height;
-						RHIUpdateTexture2D(Tex, 0, Region, RectPitch,
+						RHICmdList.UpdateTexture2D(Tex, 0, Region, RectPitch,
 							Payload.Pixels.GetData() + DataOffset);
 						DataOffset += RectBytes;
 					}

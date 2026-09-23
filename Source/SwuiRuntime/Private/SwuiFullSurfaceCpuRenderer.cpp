@@ -365,7 +365,7 @@ void FSwuiFullSurfaceCpuRenderer::TickUpload(
 								RegionCopy.SrcX = 0;
 								RegionCopy.SrcY = 0;
 
-								RHIUpdateTexture2D(
+								RHICmdList.UpdateTexture2D(
 									TexRHI,
 									0,
 									RegionCopy,
@@ -377,7 +377,7 @@ void FSwuiFullSurfaceCpuRenderer::TickUpload(
 					else
 					{
 						FUpdateTextureRegion2D Region(0, 0, 0, 0, FrameWidth, FrameHeight);
-						RHIUpdateTexture2D(TexRHI, 0, Region, FramePitch, Frame->Pixels.GetData());
+						RHICmdList.UpdateTexture2D(TexRHI, 0, Region, FramePitch, Frame->Pixels.GetData());
 					}
 				}
 				else
@@ -387,7 +387,7 @@ void FSwuiFullSurfaceCpuRenderer::TickUpload(
 					if (UploadW > 0 && UploadH > 0)
 					{
 						FUpdateTextureRegion2D Region(0, 0, 0, 0, UploadW, UploadH);
-						RHIUpdateTexture2D(TexRHI, 0, Region, FramePitch, Frame->Pixels.GetData());
+						RHICmdList.UpdateTexture2D(TexRHI, 0, Region, FramePitch, Frame->Pixels.GetData());
 					}
 				}
 			}
