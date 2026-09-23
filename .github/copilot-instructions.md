@@ -1,1 +1,0 @@
-if need info engine API or source code, look in F:\GameDev\UE_AngelScript\Engine
