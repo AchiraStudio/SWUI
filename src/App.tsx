@@ -5,6 +5,8 @@ import { MobileMenu } from './components/layout/MobileMenu'
 import { Footer } from './components/layout/Footer'
 import { Toast } from './components/common/Toast'
 import { SearchModal } from './components/common/SearchModal'
+import { copyText } from './utils/toast'
+import { SNIP } from './data/snippets'
 
 import { HomePage } from './pages/HomePage'
 import { ProductPage } from './pages/ProductPage'
@@ -71,6 +73,21 @@ export default function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // Global copy delegate for all code blocks and tabs
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement).closest('.cf-copy') as HTMLElement
+      if (btn) {
+        const key = btn.dataset.copy
+        if (key && SNIP[key]) {
+          copyText(SNIP[key])
+        }
+      }
+    }
+    document.addEventListener('click', handleGlobalClick)
+    return () => document.removeEventListener('click', handleGlobalClick)
   }, [])
 
   return (

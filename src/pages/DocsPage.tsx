@@ -26,10 +26,23 @@ export const DocsPage: React.FC<DocsPageProps> = ({ hidden, docId = 'getting-sta
         const a = el('a', null, t)
         a.href = '#/docs/' + id
         a.dataset.doc = id
+        a.addEventListener('click', () => {
+          s.classList.remove('open')
+          $('#docMobileToggle')?.classList.remove('open')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        })
         s.appendChild(a)
       })
     })
     $('#docSearchBtn')?.addEventListener('click', openSearch)
+
+    const toggle = $('#docMobileToggle')
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = s.classList.toggle('open')
+        toggle.classList.toggle('open', isOpen)
+      })
+    }
   }
 
   function renderDoc(id) {
@@ -50,6 +63,13 @@ export const DocsPage: React.FC<DocsPageProps> = ({ hidden, docId = 'getting-sta
         ${prev ? `<a href="#/docs/${prev[0]}"><span>Previous</span><b>${prev[1]}</b></a>` : '<span></span>'}
         ${next ? `<a class="nn" href="#/docs/${next[0]}"><span>Next</span><b>${next[1]}</b></a>` : ''}
       </div>`
+    
+    // Update mobile toggle label with current doc title
+    const toggle = $('#docMobileToggle')
+    if (toggle) {
+      const lbl = toggle.querySelector('.doc-toggle-title')
+      if (lbl) lbl.textContent = d.t
+    }
   }
 
   useEffect(() => {
@@ -75,6 +95,14 @@ export const DocsPage: React.FC<DocsPageProps> = ({ hidden, docId = 'getting-sta
       dangerouslySetInnerHTML={{
         __html: `
   <div class="wrap docs-g">
+    <button class="doc-mobile-toggle" id="docMobileToggle" aria-label="Toggle document topics menu">
+      <span style="display:flex;align-items:center;gap:8px">
+        <svg width="14" height="14"><use href="#i-menu"/></svg>
+        <span>Topic:</span>
+        <b class="doc-toggle-title">Getting Started</b>
+      </span>
+      <span class="mono" style="font-size:10px;color:var(--acc)">TOPICS ▾</span>
+    </button>
     <aside class="doc-side" id="docSide" aria-label="Documentation navigation"></aside>
     <article class="doc-body" id="docBody"></article>
   </div>

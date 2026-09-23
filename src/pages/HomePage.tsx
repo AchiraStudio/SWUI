@@ -55,8 +55,12 @@ export const HomePage: React.FC<PageProps> = ({ hidden }) => {
     st.hp=+$('#hcHp').value;$('#hcHpV').textContent=st.hp;
     st.spread=+$('#hcSp').value/100;$('#hcSpV').textContent=st.spread.toFixed(2);
     st.mode=$('#hcCm').value;
+    $('#hudHp').textContent=Math.round(st.hp);
+    $('#hudHpB').style.width=st.hp+'%';
+    xh.set(clamp(st.spread+st.kick,0,1),st.mode);
   }
   ['hcHp','hcSp','hcCm'].forEach(id=>$('#'+id).addEventListener('input',()=>{readConsole();packet()}));
+  $('#hcCm')?.addEventListener('change',()=>{readConsole();packet()});
   function fire(){
     if(st.ammo<=0||st.reload>0)return;
     st.ammo--;st.kick=Math.min(.6,st.kick+.28);st.spread=clamp(st.spread+.015,0,1);
@@ -65,6 +69,7 @@ export const HomePage: React.FC<PageProps> = ({ hidden }) => {
     htoast('Weapon.OnPlayerFiredShot');
   }
   $('#hcFire').addEventListener('click',fire);
+  $('.hud-shell')?.addEventListener('pointerdown',fire);
   $('#hcHit').addEventListener('click',()=>{xh.hit();const d=el('div','dmg','+'+Math.round(40+Math.random()*60));d.style.cssText='left:calc(50% + 24px);top:42%';$('#hudXh').appendChild(d);setTimeout(()=>d.remove(),820)});
   loop($('#heroConsole'),dt=>{
     st.t+=dt;
@@ -667,7 +672,7 @@ function initCrosshair(){
 
   <header id="hero">
     <div class="hero-g">
-      <div class="h-left gridbg">
+      <div class="h-left gridbg paper">
         <div class="eyebrow">SWUI 3.0 — Web UI runtime for Unreal Engine</div>
         <h1>Web<br>UI.</h1>
         <p class="h-note">the browser is your widget system —<br>the engine is your game.</p>
@@ -694,7 +699,7 @@ function initCrosshair(){
         <span class="seam-tag">SWUI Runtime</span>
         <span class="seam-arrow a2">EVENTS →</span>
       </div>
-      <div class="h-right">
+      <div class="h-right inksec">
         <h1>Inside<br><em>Unreal.</em></h1>
         <div class="h-meta"><span class="chip">CEF / Chromium</span><span class="chip">HTML</span><span class="chip">CSS</span><span class="chip">JavaScript</span><span class="chip">TypeScript</span><span class="chip">React · Vue · Svelte</span></div>
         <div class="hud-shell" aria-label="Live game HUD driven by the console on the left">
