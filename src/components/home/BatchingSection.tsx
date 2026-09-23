@@ -170,3 +170,4 @@ export const BatchingSection: React.FC = () => {
     </section>
   )
 }
+

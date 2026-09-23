@@ -1,362 +1,150 @@
-import React, { useState } from 'react'
-import { CodeBlock } from '../components/common/CodeBlock'
-import { toast } from '../utils/toast'
+// @ts-nocheck
+import React, { useEffect, useRef } from 'react'
+import { $, $$, RM, clamp, damp, el, loop, codeFig, makeCrosshair, hl, toast, copyText, observeReveal } from '../utils/engine'
 
-const PLATFORMS = [
-  ['Windows x64', 'exp', 'Experimental', 'primary development target — needs validation'],
-  ['Windows ARM64', 'exp', 'Experimental', 'needs validation'],
-  ['macOS', 'val', 'Supported', 'desktop CEF runtime'],
-  ['Linux', 'exp', 'Experimental', 'packaging validation in progress'],
-  ['Android', 'no', 'Not supported', ''],
-  ['iOS', 'no', 'Not supported', ''],
-  ['PlayStation', 'no', 'Not supported', ''],
-  ['Xbox', 'no', 'Not supported', ''],
-  ['Nintendo Switch', 'no', 'Not supported', '']
-]
-
-const STATUS_ITEMS = [
-  ['Core Unreal ↔ JavaScript interop model', 'val', 'Exists'],
-  ['Generated bindings', 'dev', 'In development'],
-  ['Preview workflow', 'dev', 'In development'],
-  ['Event ergonomics', 'dev', 'In development'],
-  ['Packaging', 'dev', 'In development'],
-  ['Desktop runtime stability', 'val', 'Validation']
-]
-
-const INPUT_MODES = {
-  game: [
-    ['W A S D', 'game'],
-    ['mouse look', 'game'],
-    ['E interact', 'game'],
-    ['I inventory', 'game (blocked)']
-  ],
-  both: [
-    ['W A S D', 'game'],
-    ['mouse look', 'game'],
-    ['E interact', 'game'],
-    ['I inventory', 'ui — opens document']
-  ],
-  ui: [
-    ['W A S D', 'ui — document'],
-    ['mouse', 'ui — document'],
-    ['Esc', 'ui — releases focus']
-  ]
+interface PageProps {
+  hidden?: boolean
 }
 
-export const ProductPage: React.FC = () => {
-  const [loadBehavior, setLoadBehavior] = useState<'lazy' | 'eager'>('lazy')
-  const [lazyProgress, setLazyProgress] = useState(0)
-  const [lazyText, setLazyText] = useState('click to trigger lazy load')
-  const [eagerText, setEagerText] = useState('click to activate resident document')
-  const [activeInputMode, setActiveInputMode] = useState<'game' | 'both' | 'ui'>('both')
-  const [transparencyMode, setTransparencyMode] = useState<'good' | 'bad'>('good')
+export const ProductPage: React.FC<PageProps> = ({ hidden }) => {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const initedRef = useRef(false)
 
-  const handleTriggerLazy = () => {
-    setLazyText('loading…')
-    setLazyProgress(0)
-    requestAnimationFrame(() => setLazyProgress(100))
-    setTimeout(() => {
-      setLazyText('activated — total: cold load + mount')
-    }, 1450)
-  }
+  useEffect(() => {
+    if (!containerRef.current || initedRef.current || hidden) return
+    initedRef.current = true
 
-  const handleTriggerEager = () => {
-    setEagerText('activated — document already resident')
-    toast('Eager: instant activation')
-  }
+    function initProduct(){
+  const MX=[
+    ['Windows x64','exp','Experimental','primary development target — needs validation'],
+    ['Windows ARM64','exp','Experimental','needs validation'],
+    ['macOS','val','Supported','desktop CEF runtime'],
+    ['Linux','exp','Experimental','packaging validation in progress'],
+    ['Android','no','Not supported',''],['iOS','no','Not supported',''],
+    ['PlayStation','no','Not supported',''],['Xbox','no','Not supported',''],['Nintendo Switch','no','Not supported',''],
+  ];
+  $('#platformMx').innerHTML=`<div class="mrow h"><span>Platform</span><span>Status</span><span>Notes</span></div>`+MX.map(r=>`<div class="mrow"><span class="mp">${r[0]}</span><span><span class="badge ${r[1]}">${r[2]}</span></span><span class="ms">${r[3]}</span></div>`).join('');
+  const ST=[
+    ['Core Unreal ↔ JavaScript interop model','val','Exists'],
+    ['Generated bindings','dev','In development'],
+    ['Preview workflow','dev','In development'],
+    ['Event ergonomics','dev','In development'],
+    ['Packaging','dev','In development'],
+    ['Desktop runtime stability','val','Validation'],
+  ];
+  $('#statusMx').innerHTML=ST.map(r=>`<div class="mrow"><span class="mp">${r[0]}</span><span><span class="badge ${r[1]}">${r[2]}</span></span><span class="ms">stated as-is, not as marketing</span></div>`).join('');
+  $('#lbLazy').addEventListener('click',()=>{
+    const bar=$('#lbLazyBar');$('#lbLazyT').textContent='loading…';bar.style.width='0';
+    requestAnimationFrame(()=>bar.style.width='100%');
+    setTimeout(()=>$('#lbLazyT').textContent='activated — total: cold load + mount',1450);
+  });
+  $('#lbEager').addEventListener('click',()=>{$('#lbEagerT').textContent='activated — document already resident';toast('Eager: instant activation')});
+  const IM={
+    game:[['W A S D','game'],['mouse look','game'],['E interact','game'],['I inventory','game (blocked)']],
+    both:[['W A S D','game'],['mouse look','game'],['E interact','game'],['I inventory','ui — opens document']],
+    ui:[['W A S D','ui — document'],['mouse','ui — document'],['Esc','ui — releases focus']]
+  };
+  const setIM=m=>{
+    $$('[data-im]').forEach(b=>b.classList.toggle('on',b.dataset.im===m));
+    $('#imTrace').innerHTML=IM[m].map(([k,v])=>`<em>${k}</em> → <span class="${v.startsWith('ui')?'r':'g'}">${v}</span>`).join('<br>');
+  };
+  $$('[data-im]').forEach(b=>b.addEventListener('click',()=>setIM(b.dataset.im)));
+  setIM('both');
+  $$('[data-tr]').forEach(b=>b.addEventListener('click',()=>{
+    $$('[data-tr]').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+    const good=b.dataset.tr==='good';
+    $('#trBad').firstElementChild.style.display=good?'none':'flex';
+    $('#trGood').style.opacity=good?'1':'.3';
+  }));
+  $('#trGood').style.opacity='1';
+  $('#trCode').innerHTML=codeFig('trcss','hud.css','css','l',false);
+}
+
+
+    try {
+      initProduct()
+    } catch (e) {
+      console.error('Error in initProduct:', e)
+    }
+
+    observeReveal(containerRef.current)
+  }, [hidden])
 
   return (
-    <div className="page paper" data-page="product" style={{ paddingTop: '72px' }}>
-      <header className="pgh">
-        <div className="wrap">
-          <div className="eyebrow">Product</div>
-          <h1>
-            Built for production.<br />
-            <em>Engineered for games.</em>
-          </h1>
-          <p className="lead">
-            SWUI is an architectural layer for Unreal Engine 5 that allows UI engineers and technical artists to build production user interfaces with modern web standards without sacrificing gameplay determinism.
-          </p>
+    <div
+      ref={containerRef}
+      className="page paper"
+      data-page="product"
+      hidden={hidden}
+      dangerouslySetInnerHTML={{ __html: `
+  <header class="pgh"><div class="wrap">
+    <div class="eyebrow">Product</div>
+    <h1>A runtime,<br><em>not a widget.</em><span class="si">— every surface, stated plainly.</span></h1>
+    <p class="lead">SWUI is a web UI runtime for Unreal Engine. It manages multiple independent web documents — lifecycle, state, events, input, layering and rendering — while Unreal keeps ownership of gameplay.</p>
+  </div></header>
+  <section class="sec"><div class="wrap">
+    <div class="shead"><span class="sidx">01</span><span class="slbl">Document asset</span><span class="srule"></span><span class="stag">Conceptual spec</span></div>
+    <div class="rp-grid">
+      <div class="plate">
+        <div class="plate-h"><span class="sq"></span>Details — USwuiDocumentAsset</div>
+        <div class="plate-b">
+          <div class="frow"><label>Document ID</label><span class="mono" style="font-size:12px">MainHUD</span></div>
+          <div class="frow"><label>Entry URL</label><span class="mono acc" style="font-size:11.5px">../Content/UI/hud.html</span></div>
+          <div class="frow"><label>Layer</label><select><option>Persistent</option><option selected>Level</option><option>Modal</option></select></div>
+          <div class="frow"><label>Z-Order</label><input type="number" value="10"></div>
+          <div class="frow"><label>Load Behavior</label><select><option>Lazy</option><option selected>Eager</option></select></div>
+          <div class="frow"><label>Render Mode</label><select><option selected>GPU Shared Texture</option><option>CPU Full Surface</option></select></div>
+          <div class="frow"><label>Target FrameRate</label><input type="number" value="60"></div>
+          <div class="frow"><label>Transparency</label><label class="cbx"><input type="checkbox" checked><i></i> allow alpha</label></div>
+          <div class="frow"><label>Sleep When Hidden</label><label class="cbx"><input type="checkbox" checked><i></i> WasHidden</label></div>
+          <div class="frow"><label>Pointer / Keyboard</label><label class="cbx"><input type="checkbox" checked><i></i> route</label></div>
         </div>
-      </header>
-
-      {/* Section 01: Core Capabilities */}
-      <section className="sec" style={{ borderTop: 0 }}>
-        <div className="wrap">
-          <div className="shead">
-            <span className="sidx">01</span>
-            <span className="slbl">Load behaviors</span>
-            <span className="srule" />
-            <span className="stag">Eager vs Lazy</span>
-          </div>
-
-          <div className="rp-grid rv in">
-            <div className="plate">
-              <div className="plate-h">
-                <span className="sq" />
-                <span>Lazy Document Loading</span>
-                <span className="sp" />
-                <button className="tbtn pri" onClick={handleTriggerLazy}>
-                  Trigger Load
-                </button>
-              </div>
-              <div className="plate-b">
-                <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--mut)' }}>
-                  Cold load from disk / network upon activation request.
-                </div>
-                <div className="bar" style={{ width: '100%', height: '8px', background: 'var(--card2)', marginBottom: '12px' }}>
-                  <i
-                    style={{
-                      width: `${lazyProgress}%`,
-                      transition: lazyProgress ? 'width 1.4s ease-out' : 'none'
-                    }}
-                  />
-                </div>
-                <div className="mono" style={{ fontSize: '11px', color: 'var(--fg)' }}>
-                  {lazyText}
-                </div>
-              </div>
-            </div>
-
-            <div className="plate">
-              <div className="plate-h">
-                <span className="sq" />
-                <span>Eager Preloaded Document</span>
-                <span className="sp" />
-                <button className="tbtn pri" onClick={handleTriggerEager}>
-                  Activate
-                </button>
-              </div>
-              <div className="plate-b">
-                <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--mut)' }}>
-                  Resident in memory — zero-frame latency upon activation.
-                </div>
-                <div className="bar" style={{ width: '100%', height: '8px', background: 'var(--card2)', marginBottom: '12px' }}>
-                  <i style={{ width: '100%', background: 'var(--ok)' }} />
-                </div>
-                <div className="mono" style={{ fontSize: '11px', color: 'var(--fg)' }}>
-                  {eagerText}
-                </div>
-              </div>
-            </div>
-          </div>
+      </div>
+      <div>
+        <h3 class="display" style="font-size:clamp(20px,2vw,28px)">Load behavior</h3>
+        <p class="lead" style="font-size:13.5px;margin:10px 0 16px">Lazy loads on activation. Eager prepares the document ahead of time.</p>
+        <div class="grid2">
+          <div class="plate"><div class="plate-b">
+            <h5 class="mono" style="font-size:10px;letter-spacing:.2em;color:var(--mut)">LAZY</h5>
+            <p style="font-size:12px;color:var(--mut);margin:8px 0 12px">button click → load → activate</p>
+            <button class="tbtn" id="lbLazy">Click to open</button>
+            <div style="height:3px;background:var(--ln2);margin-top:12px"><i id="lbLazyBar" style="display:block;height:100%;width:0;background:var(--blaze);transition:width 1.4s linear"></i></div>
+            <p class="mono dim" style="font-size:10px;margin-top:8px" id="lbLazyT">idle</p>
+          </div></div>
+          <div class="plate"><div class="plate-b">
+            <h5 class="mono" style="font-size:10px;letter-spacing:.2em;color:var(--mut)">EAGER</h5>
+            <p style="font-size:12px;color:var(--mut);margin:8px 0 12px">preloaded at level start → ready</p>
+            <span class="chip on">preloaded · ready</span>
+            <button class="tbtn" id="lbEager" style="margin-top:12px">Activate</button>
+            <p class="mono dim" style="font-size:10px;margin-top:12px" id="lbEagerT">idle</p>
+          </div></div>
         </div>
-      </section>
-
-      {/* Section 02: Input Enablement Modes */}
-      <section className="sec">
-        <div className="wrap">
-          <div className="shead">
-            <span className="sidx">02</span>
-            <span className="slbl">Input Enablement</span>
-            <span className="srule" />
-            <span className="stag">Game · Both · UI</span>
-          </div>
-
-          <div className="rp-grid rv in">
-            <div className="plate">
-              <div className="plate-h">
-                <span className="sq" />
-                <span>Active Routing Mode</span>
-                <span className="sp" />
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    className={`tbtn ${activeInputMode === 'game' ? 'on' : ''}`}
-                    onClick={() => setActiveInputMode('game')}
-                  >
-                    Game only
-                  </button>
-                  <button
-                    className={`tbtn ${activeInputMode === 'both' ? 'on' : ''}`}
-                    onClick={() => setActiveInputMode('both')}
-                  >
-                    Game + UI
-                  </button>
-                  <button
-                    className={`tbtn ${activeInputMode === 'ui' ? 'on' : ''}`}
-                    onClick={() => setActiveInputMode('ui')}
-                  >
-                    UI only
-                  </button>
-                </div>
-              </div>
-              <div className="plate-b">
-                <div
-                  className="ir-trace"
-                  style={{ minHeight: '140px' }}
-                >
-                  {INPUT_MODES[activeInputMode].map(([k, v], i) => (
-                    <div key={i}>
-                      <em>{k}</em> →{' '}
-                      <span className={v.startsWith('ui') ? 'r' : 'g'}>{v}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="lead" style={{ fontSize: '14px', lineHeight: 1.7 }}>
-                Input dispatching can be dynamically split between Slate, CEF, and Unreal Engine gameplay.
-                In <b>Game + UI</b> mode, non-interactive documents let mouse clicks and gamepad inputs pass cleanly through to your player controller.
-              </p>
-            </div>
-          </div>
+        <h3 class="display" style="font-size:clamp(20px,2vw,28px);margin-top:42px">Input enablement</h3>
+        <div class="api-strip" style="margin:14px 0" id="imModes">
+          <button class="tbtn" data-im="game">Game Only</button><button class="tbtn on" data-im="both">Game + UI</button><button class="tbtn" data-im="ui">UI Only</button>
         </div>
-      </section>
-
-      {/* Section 03: Transparency Setup */}
-      <section className="sec">
-        <div className="wrap">
-          <div className="shead">
-            <span className="sidx">03</span>
-            <span className="slbl">Alpha Transparency</span>
-            <span className="srule" />
-            <span className="stag">HUD Compositing</span>
-          </div>
-
-          <div className="rp-grid rv in">
-            <div className="plate">
-              <div className="plate-h">
-                <span className="sq" />
-                <span>Viewport Compositor</span>
-                <span className="sp" />
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    className={`tbtn ${transparencyMode === 'good' ? 'on' : ''}`}
-                    onClick={() => setTransparencyMode('good')}
-                  >
-                    Transparent
-                  </button>
-                  <button
-                    className={`tbtn ${transparencyMode === 'bad' ? 'on' : ''}`}
-                    onClick={() => setTransparencyMode('bad')}
-                  >
-                    Opaque (Buggy)
-                  </button>
-                </div>
-              </div>
-              <div className="plate-b">
-                <div
-                  style={{
-                    height: '180px',
-                    position: 'relative',
-                    background: 'radial-gradient(circle at center, #1b2838 0%, #0d1217 100%)',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <div style={{ color: 'var(--mut)', font: '500 12px var(--mono)' }}>
-                    [3D Game World Background]
-                  </div>
-
-                  {/* Bad overlay */}
-                  {transparencyMode === 'bad' && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: '#ffffff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#111',
-                        font: '600 13px var(--mono)'
-                      }}
-                    >
-                      ⚠ Opaque White Background (Missing CSS Transparency)
-                    </div>
-                  )}
-
-                  {/* Good overlay */}
-                  {transparencyMode === 'good' && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        bottom: '20px',
-                        right: '20px',
-                        padding: '8px 16px',
-                        background: 'rgba(0,0,0,0.6)',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: 'var(--bone)',
-                        font: '600 14px var(--mono)'
-                      }}
-                    >
-                      Ammo: 30 / 120
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <CodeBlock snipKey="trcss" file="hud.css" lang="css" theme="l" showLineNumbers={false} />
-            </div>
-          </div>
+        <div class="ir-trace" id="imTrace" style="min-height:96px"></div>
+        <h3 class="display" style="font-size:clamp(20px,2vw,28px);margin-top:42px">Transparency</h3>
+        <div class="api-strip" style="margin:14px 0"><button class="tbtn" data-tr="bad">Opaque body</button><button class="tbtn on" data-tr="good">Transparent body</button></div>
+        <div class="grid2">
+          <div class="roi-wrap" style="aspect-ratio:16/8" id="trBad"><div style="position:absolute;inset:0;background:#F4F3ED;display:flex;align-items:center;justify-content:center;color:var(--ink);font:600 12px var(--sans)">the web page hides the world</div></div>
+          <div class="roi-wrap" style="aspect-ratio:16/8" id="trGood"><div style="position:absolute;inset:56% -12% 0;background:linear-gradient(rgba(239,238,232,.05) 1px,transparent 1px) 0 0/100% 32px,linear-gradient(90deg,rgba(239,238,232,.05) 1px,transparent 1px) 0 0/56px 100%;transform:perspective(300px) rotateX(58deg);transform-origin:top"></div><div style="position:absolute;right:14px;bottom:10px;font:600 24px var(--mono);color:var(--bone)">24 <span style="font-size:11px;color:#6E7078">| 180</span></div></div>
         </div>
-      </section>
-
-      {/* Section 04: Platforms & Matrix */}
-      <section className="sec">
-        <div className="wrap">
-          <div className="shead">
-            <span className="sidx">04</span>
-            <span className="slbl">Platform Matrix</span>
-            <span className="srule" />
-            <span className="stag">Target Platforms</span>
-          </div>
-          <div className="sec-top">
-            <h2 className="display" style={{ fontSize: 'clamp(26px,3vw,44px)' }}>
-              A desktop CEF runtime.<br />
-              <span className="si">stated plainly.</span>
-            </h2>
-          </div>
-
-          <div className="matrix rv in" id="platformMx">
-            <div className="mrow h">
-              <span>Platform</span>
-              <span>Status</span>
-              <span>Notes</span>
-            </div>
-            {PLATFORMS.map(([p, cls, st, note], i) => (
-              <div key={i} className="mrow">
-                <span className="mp">{p}</span>
-                <span>
-                  <span className={`badge ${cls}`}>{st}</span>
-                </span>
-                <span className="ms">{note}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="shead" style={{ marginTop: '64px' }}>
-            <span className="sidx">05</span>
-            <span className="slbl">Project status</span>
-            <span className="srule" />
-            <span className="stag">As-is, not as marketing</span>
-          </div>
-          <div className="sec-top">
-            <h2 className="display" style={{ fontSize: 'clamp(26px,3vw,44px)' }}>
-              Where the project<br />
-              <span className="si">actually is.</span>
-            </h2>
-          </div>
-
-          <div className="matrix rv in" id="statusMx">
-            {STATUS_ITEMS.map(([title, cls, st], i) => (
-              <div key={i} className="mrow">
-                <span className="mp">{title}</span>
-                <span>
-                  <span className={`badge ${cls}`}>{st}</span>
-                </span>
-                <span className="ms">stated as-is, not as marketing</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        <div id="trCode" style="margin-top:14px"></div>
+      </div>
     </div>
+  </div></section>
+  <section class="sec inksec"><div class="wrap">
+    <div class="shead"><span class="sidx">02</span><span class="slbl">Platform support</span><span class="srule"></span><span class="stag">Desktop CEF runtime</span></div>
+    <div class="sec-top"><h2 class="display" style="font-size:clamp(26px,3vw,44px)">A desktop CEF runtime.<br><span class="si">stated plainly.</span></h2></div>
+    <div class="matrix rv" id="platformMx"></div>
+    <div class="shead" style="margin-top:64px"><span class="sidx">03</span><span class="slbl">Project status</span><span class="srule"></span><span class="stag">As-is, not as marketing</span></div>
+    <div class="sec-top"><h2 class="display" style="font-size:clamp(26px,3vw,44px)">Where the project<br><span class="si">actually is.</span></h2></div>
+    <div class="matrix rv" id="statusMx"></div>
+  </div></section>
+</div>
+
+<!-- ================================================= ARCHITECTURE ================================================= -->` }}
+    />
   )
 }

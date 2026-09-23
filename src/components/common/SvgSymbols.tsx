@@ -56,3 +56,4 @@ export const SvgSymbols: React.FC = () => (
     </symbol>
   </svg>
 )
+

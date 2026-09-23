@@ -80,16 +80,18 @@ export default function App() {
       <MobileMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} />
 
       <main id="app">
-        {currentRoute === 'home' && <HomePage />}
-        {currentRoute === 'product' && <ProductPage />}
-        {currentRoute === 'architecture' && <ArchitecturePage />}
-        {currentRoute === 'sdk' && <SdkPage />}
-        {currentRoute === 'examples' && <ExamplesPage />}
-        {currentRoute === 'docs' && (
-          <DocsPage docId={subRoute || 'getting-started'} onOpenSearch={() => setSearchOpen(true)} />
-        )}
-        {currentRoute === 'reference' && <ReferencePage />}
-        {currentRoute === 'profiling' && <ProfilingPage />}
+        <HomePage hidden={currentRoute !== 'home'} />
+        <ProductPage hidden={currentRoute !== 'product'} />
+        <ArchitecturePage hidden={currentRoute !== 'architecture'} />
+        <SdkPage hidden={currentRoute !== 'sdk'} />
+        <ExamplesPage hidden={currentRoute !== 'examples'} />
+        <DocsPage
+          hidden={currentRoute !== 'docs'}
+          docId={subRoute || 'getting-started'}
+          onOpenSearch={() => setSearchOpen(true)}
+        />
+        <ReferencePage hidden={currentRoute !== 'reference'} />
+        <ProfilingPage hidden={currentRoute !== 'profiling'} />
       </main>
 
       <Footer />

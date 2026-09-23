@@ -38,3 +38,4 @@ function fallbackCopy(text: string): void {
   }
   textarea.remove()
 }
+

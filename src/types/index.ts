@@ -41,3 +41,4 @@ export interface SearchResult {
   url: string
   cat: string
 }
+

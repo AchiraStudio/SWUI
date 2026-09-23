@@ -131,3 +131,4 @@ export const LifecycleSection: React.FC = () => {
     </section>
   )
 }
+
