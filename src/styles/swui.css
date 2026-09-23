@@ -491,6 +491,7 @@ footer{background:var(--ink);color:var(--bone);border-top:2px solid var(--blaze)
 .ft-bot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px;margin-top:56px;padding-top:24px;border-top:1px solid rgba(239,238,232,.08);font:400 11px var(--mono);color:#6E7078}
 /* ================= pages ================= */
 .page{padding-top:60px}
+.page[data-page="home"]{padding-top:0}
 .pgh{padding:clamp(56px,9vh,110px) 0 clamp(34px,5vh,58px);border-bottom:1px solid var(--ln2)}
 .pgh h1{font:700 clamp(42px,5.6vw,84px)/.94 var(--sans);letter-spacing:-.04em;text-transform:uppercase}
 .pgh h1 em{font-style:normal;color:transparent;-webkit-text-stroke:1.2px var(--mut)}

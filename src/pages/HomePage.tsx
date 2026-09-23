@@ -96,7 +96,7 @@ export const HomePage: React.FC<PageProps> = ({ hidden }) => {
     const put=()=>{const d=el('div');d.innerHTML=L[li++%L.length]();box.prepend(d);while(box.children.length>2)box.lastChild.remove()};
     put();if(!RM)setInterval(()=>{const r=box.getBoundingClientRect();if(r.top<innerHeight&&r.bottom>0)put()},2300);
   }
-  initDocStack();initLifecycle();initPreload();initStateBus();initBatching();initPacing();initRenderPaths();initRoi();initSleep();initInputRoute();initGamepad();initTagFlow();initBlueprint();initTsExplorer();initFrameworks();initPreview();initCrosshair();
+  initDocStack();initLifecycle();initPreload();initStateBus();initBatching();initPacing();initRenderPaths();initRoi();initSleep();initInputRoute();initGamepad();initTagFlow();initBlueprint();initTsExplorer();initFrameworks();initCrosshair();
   const dc=$('#docsCta');
   [['Getting started — five minutes to a HUD','#/docs/getting-started'],['Documents, layers & Z-order','#/docs/documents'],['State bus & batching','#/docs/state'],['Events & GameplayTags','#/docs/events'],['Input routing','#/docs/input'],['Rendering: GPU, CPU, pacing','#/docs/rendering'],['Troubleshooting','#/docs/troubleshooting']].forEach(([t,h])=>{
     const a=el('a','dlink',`<span>${t}</span><svg><use href="#i-arr"/></svg>`);a.href=h;dc.appendChild(a);
@@ -599,20 +599,7 @@ function initFrameworks(){
   $$('#fwTabs [data-fw]').forEach(t=>t.addEventListener('click',()=>set(t.dataset.fw)));
   set('react');
 }
-/* ---- preview ---- */
-function initPreview(){
-  const xh=makeCrosshair($('#pvXh'));
-  const upd=()=>{
-    xh.set($('#pvSp').value/100,$('#pvCm').value);
-    $('#pvAmmo').textContent=$('#pvAm').value;
-    const on=$('#pvCi').checked;
-    $('#pvPrompt').style.display=on?'':'none';
-    if(on)$('#pvPrompt').textContent='[E] '+($('#pvPr').value||'…');
-  };
-  ['pvSp','pvAm','pvCm','pvCi','pvPr'].forEach(id=>$('#'+id).addEventListener('input',upd));
-  $('#pvFire').addEventListener('click',()=>{xh.hit();const f=el('div','dmg','FIRE');f.style.cssText='left:50%;top:42%';$('#pvStage').appendChild(f);setTimeout(()=>f.remove(),820)});
-  upd();
-}
+/* ---- preview removed: merged into flagship crosshair ---- */
 /* ---- crosshair flagship ---- */
 function initCrosshair(){
   const xh=makeCrosshair($('#cxXh'));
@@ -1155,39 +1142,7 @@ function initCrosshair(){
     </div>
   </div></section>
 
-  <!-- 16 preview -->
-  <section class="sec paper"><div class="wrap">
-    <div class="shead"><span class="sidx">16</span><span class="slbl">Preview</span><span class="srule"></span><span class="badge dev">in development</span></div>
-    <div class="sec-top">
-      <h2 class="display">Design the UI<br><span class="si">before running the game.</span></h2>
-      <p class="lead">The preview direction: a dedicated window that loads your actual UI, uses the generated interface contract, and exposes reflected state as controls and reflected events as triggers — the same frontend code in preview and in Unreal.</p>
-    </div>
-    <div class="pv rv">
-      <div class="plate">
-        <div class="plate-h"><span class="sq"></span>Controls — from bindings.gen.ts</div>
-        <div class="plate-b">
-          <div class="frow"><label for="pvSp">CurrentSpread · float</label><input type="range" id="pvSp" min="0" max="100" value="35"></div>
-          <div class="frow"><label for="pvAm">Ammo · int</label><input type="number" id="pvAm" value="24"></div>
-          <div class="frow"><label for="pvCm">CrosshairMode · enum</label><select id="pvCm"><option>PRECISE</option><option selected>EXPANDED</option><option>SNIPER</option></select></div>
-          <div class="frow"><label>bCanInteract · bool</label><label class="cbx"><input type="checkbox" id="pvCi" checked><i></i> true</label></div>
-          <div class="frow"><label for="pvPr">Prompt · string</label><input type="text" id="pvPr" value="Open Door"></div>
-          <div class="frow"><label>OnPlayerFiredShot · event</label><button class="tbtn" id="pvFire" style="justify-content:center">Trigger event</button></div>
-        </div>
-      </div>
-      <div class="plate" style="background:var(--ink);color:var(--bone);--fg:var(--bone);--mut:#8A8C95;--ln:rgba(239,238,232,.2);--ln2:rgba(239,238,232,.08);--card:#17181D;--card2:#1E2027;--acc:#FF6B33;--ed:var(--bone);--edt:var(--ink)">
-        <div class="plate-h"><span class="sq"></span>Preview — MainHUD<span class="sp"></span><span class="badge dev">in development</span></div>
-        <div class="plate-b">
-          <div class="roi-wrap" style="aspect-ratio:16/9" id="pvStage">
-            <div style="position:absolute;inset:56% -12% 0;background:linear-gradient(rgba(239,238,232,.05) 1px,transparent 1px) 0 0/100% 32px,linear-gradient(90deg,rgba(239,238,232,.05) 1px,transparent 1px) 0 0/56px 100%;transform:perspective(300px) rotateX(58deg);transform-origin:top;-webkit-mask-image:linear-gradient(180deg,transparent,#000 40%);mask-image:linear-gradient(180deg,transparent,#000 40%)"></div>
-            <div style="position:absolute;inset:0" id="pvXh"></div>
-            <div class="hudel hud-ammo"><div class="big"><span id="pvAmmo">24</span><span> | 180</span></div></div>
-            <div class="hudel" style="left:50%;bottom:18%;transform:translateX(-50%)" id="pvPrompt"><span class="chip" style="color:var(--bone);border-color:rgba(239,238,232,.35)">[E] Open Door</span></div>
-          </div>
-          <p class="dim mono" style="font-size:10px;margin-top:12px">float → slider · int → number · bool → checkbox · enum → dropdown · string → text · event → trigger. The preview workflow is an active development area — controls shown illustrate the intended direction.</p>
-        </div>
-      </div>
-    </div>
-  </div></section>
+  <!-- 16 preview removed to eliminate redundant interactive window -->
 
   <!-- 17 crosshair -->
   <section class="sec inksec" id="crosshair"><div class="wrap">

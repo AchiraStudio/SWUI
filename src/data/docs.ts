@@ -14,195 +14,900 @@ export interface DocContent {
   h: string
 }
 
-export const DOCNAV: DocCategory[] = [
-  {
-    "category": "GETTING STARTED",
-    "items": [
-      {
-        "id": "getting-started",
-        "title": "Overview"
-      },
-      {
-        "id": "installation",
-        "title": "Installation"
-      },
-      {
-        "id": "vanilla",
-        "title": "Vanilla HTML"
-      }
-    ]
-  },
-  {
-    "category": "CORE CONCEPTS",
-    "items": [
-      {
-        "id": "documents",
-        "title": "Documents"
-      },
-      {
-        "id": "state",
-        "title": "State"
-      },
-      {
-        "id": "events",
-        "title": "Events"
-      },
-      {
-        "id": "input",
-        "title": "Input"
-      }
-    ]
-  },
-  {
-    "category": "RUNTIME",
-    "items": [
-      {
-        "id": "rendering",
-        "title": "Rendering"
-      },
-      {
-        "id": "performance",
-        "title": "Performance"
-      }
-    ]
-  },
-  {
-    "category": "INTEGRATION",
-    "items": [
-      {
-        "id": "blueprint",
-        "title": "Blueprint & Codegen"
-      },
-      {
-        "id": "typescript",
-        "title": "TypeScript"
-      },
-      {
-        "id": "react",
-        "title": "React"
-      },
-      {
-        "id": "vue",
-        "title": "Vue"
-      },
-      {
-        "id": "svelte",
-        "title": "Svelte"
-      },
-      {
-        "id": "cli",
-        "title": "CLI & Config"
-      }
-    ]
-  },
-  {
-    "category": "TOOLS",
-    "items": [
-      {
-        "id": "preview",
-        "title": "Preview"
-      },
-      {
-        "id": "profiling",
-        "title": "Profiling"
-      },
-      {
-        "id": "troubleshooting",
-        "title": "Troubleshooting"
-      }
-    ]
-  }
+export const DOCNAV: [string, [string, string][]][] = [
+  ['GETTING STARTED', [
+    ['getting-started', 'Quickstart (UE 5.8.3)'],
+    ['installation', 'Installation & Setup'],
+    ['vanilla', 'Vanilla HTML/CSS Path'],
+  ]],
+  ['CORE CONCEPTS', [
+    ['documents', 'Multi-Document Engine'],
+    ['lifecycle', 'Document Lifecycle & States'],
+    ['state', 'State Bus & Atomic Batching'],
+    ['events', 'Two-Way Events & Tags'],
+    ['delegate-payloads', 'Delegate Payloads & C++ Bridge'],
+  ]],
+  ['RUNTIME & HARDWARE', [
+    ['rendering', 'Direct3D 11 GPU Shared Textures'],
+    ['pacing', 'Frame Pacing & Compositing'],
+    ['memory-cleanup', 'Deterministic Lifecycle & Cleanup'],
+  ]],
+  ['INPUT & INTERACTION', [
+    ['input-routing', 'Input Preprocessing & Focus'],
+    ['react-input-fields', 'React Input Controls'],
+    ['navigation', 'Gamepad & Menu Navigation'],
+  ]],
+  ['FRAMEWORKS & SDK', [
+    ['react', 'React 18 Integration'],
+    ['vue-svelte', 'Vue 3 & Svelte Stores'],
+    ['cli', 'SWUI CLI & Production Build'],
+  ]],
+  ['PRACTICAL RECIPES', [
+    ['recipe-hud-inventory', 'HUD + Modal Inventory'],
+    ['recipe-pause-menu', 'Pause Menu with World Paused'],
+    ['recipe-preloading', 'Zero-Stutter Level Preloading'],
+    ['recipe-in-world-screens', '3D In-World Mesh Screens'],
+  ]],
+  ['TOOLS & PROFILING', [
+    ['profiling', 'Diagnostic CVars & Profiling'],
+    ['troubleshooting', 'Troubleshooting & Gotchas'],
+  ]],
 ];
 
 export const DOCS: Record<string, DocContent> = {
-  "getting-started": {
-    "t": "Getting Started",
-    "m": "5 min · vanilla path",
-    "h": "\n<p>SWUI puts a web UI runtime inside Unreal Engine. You write HTML, CSS and JavaScript — or a full modern frontend — and Unreal owns gameplay state, events and runtime control.</p>\n<h2>Path A — Vanilla</h2>\n<ol><li>Create <code>Content/UI/hud.html</code></li><li>Create an <b>SWUI Document Asset</b></li><li>Set the <b>Entry URL</b> to your HTML file</li><li><b>Load</b> the document</li><li><b>Activate</b> the document</li><li><b>Set state</b> from Unreal</li><li>Handle a <b>navigation event</b> from the web side</li></ol>\n<h2>Path B — Modern frontend</h2>\n<ol><li><code>npm i @swui/core</code></li><li>Install a framework package — <code>@swui/react</code>, <code>@swui/vue</code> or <code>@swui/svelte</code></li><li>Build your frontend</li><li><code>swui build --production</code></li><li>Point the Document Asset at <code>dist/index.html</code></li><li>Activate in Unreal</li></ol>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">hud.html</span><span class=\"cf-lang\">html</span><button class=\"cf-copy\" data-copy=\"hudHtml\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \"><span class=\"c\">&lt;!-- Content/UI/hud.html --&gt;</span></span><span class=\"cl\" data-n=\" 2 \"><span class=\"t\">&lt;!doctype</span> html<span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\" 3 \"><span class=\"t\">&lt;html</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\" 4 \"><span class=\"t\">&lt;head</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\" 5 \">  <span class=\"t\">&lt;meta</span> <span class=\"a\">charset</span>=<span class=\"s\">\"utf-8\"</span> <span class=\"t\">/&gt;</span></span><span class=\"cl\" data-n=\" 6 \">  <span class=\"t\">&lt;style</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\" 7 \">    body { margin: 0; background: transparent; }</span><span class=\"cl\" data-n=\" 8 \">    .ammo {</span><span class=\"cl\" data-n=\" 9 \">      position: fixed; right: 32px; bottom: 24px;</span><span class=\"cl\" data-n=\"10 \">      font: 600 44px/1 ui-monospace, monospace;</span><span class=\"cl\" data-n=\"11 \">      color: #ececf1; text-align: right;</span><span class=\"cl\" data-n=\"12 \">    }</span><span class=\"cl\" data-n=\"13 \">    .ammo small { display: block; font-size: 12px; opacity: .55; }</span><span class=\"cl\" data-n=\"14 \">  <span class=\"t\">&lt;/style</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\"15 \"><span class=\"t\">&lt;/head</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\"16 \"><span class=\"t\">&lt;body</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\"17 \">  <span class=\"t\">&lt;div</span> <span class=\"a\">class</span>=<span class=\"s\">\"ammo\"</span><span class=\"t\">&gt;</span><span class=\"t\">&lt;span</span> <span class=\"a\">id</span>=<span class=\"s\">\"ammo\"</span><span class=\"t\">&gt;</span>24<span class=\"t\">&lt;/span</span><span class=\"t\">&gt;</span><span class=\"t\">&lt;small</span><span class=\"t\">&gt;</span>RESERVE 180<span class=\"t\">&lt;/small</span><span class=\"t\">&gt;</span><span class=\"t\">&lt;/div</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\"18 \"> </span><span class=\"cl\" data-n=\"19 \">  <span class=\"t\">&lt;script</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\"20 \">    // React to Unreal state — no polling, no bridge glue.</span><span class=\"cl\" data-n=\"21 \">    swui.on('Weapon.CurrentAmmo', v =<span class=\"t\">&gt;</span> {</span><span class=\"cl\" data-n=\"22 \">      document.getElementById('ammo').textContent = v;</span><span class=\"cl\" data-n=\"23 \">    });</span><span class=\"cl\" data-n=\"24 \">  <span class=\"t\">&lt;/script</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\"25 \"><span class=\"t\">&lt;/body</span><span class=\"t\">&gt;</span></span><span class=\"cl\" data-n=\"26 \"><span class=\"t\">&lt;/html</span><span class=\"t\">&gt;</span></span></pre></figure>\n<div class=\"callout\"><svg><use href=\"#i-zap\"/></svg><p>No Node, no bundler, no framework required for the basic workflow — a single HTML file is a complete UI document.</p></div>"
+  'getting-started': {
+    t: 'Getting Started with SWUI 3.0',
+    m: '5 min · Unreal Engine 5.8.3',
+    h: `
+<p>SWUI is a high-performance web UI layer for Unreal Engine 5.8.3. It allows you to build game interfaces using standard browser technologies (HTML, CSS, JavaScript, TypeScript, React, Vue, Svelte) while keeping gameplay state, event dispatching, and runtime control firmly inside Unreal.</p>
+
+<h2>Two Core Paths</h2>
+<div class="table-wrap">
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;font:400 13px var(--mono)">
+    <thead>
+      <tr style="border-bottom:2px solid var(--ln);text-align:left">
+        <th style="padding:8px">Path</th>
+        <th style="padding:8px">Target Audience</th>
+        <th style="padding:8px">Tooling</th>
+        <th style="padding:8px">Setup Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px;color:var(--acc);font-weight:600">Path A: Vanilla HTML/CSS</td>
+        <td style="padding:8px">Lightweight HUDs, prototyping, scripters</td>
+        <td style="padding:8px">Zero (No Node.js, no npm)</td>
+        <td style="padding:8px">2 minutes</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;color:var(--acc);font-weight:600">Path B: Modern Frameworks</td>
+        <td style="padding:8px">Complex reactive UIs, design systems (React, Vue, Svelte, Vite)</td>
+        <td style="padding:8px">Node.js + @swui/* SDK</td>
+        <td style="padding:8px">5 minutes</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>Path A: 5-Minute Vanilla Quickstart</h2>
+<ol>
+  <li><b>Create your HTML file</b>: In your project's <code>Content/UI/</code> folder, create <code>hud.html</code>.</li>
+  <li><b>Create the USwuiDocumentAsset</b>: Right-click in Content Browser &rarr; <b>Miscellaneous</b> &rarr; <b>SWUI UI Document</b>. Name it <code>DA_HUD</code>.</li>
+  <li><b>Configure DA_HUD</b>:
+    <ul>
+      <li><code>Document Id</code>: <code>MainHUD</code></li>
+      <li><code>Entry URL</code>: <code>UI/hud.html</code></li>
+      <li><code>Layer</code>: <code>Level</code></li>
+      <li><code>Z-Order</code>: <code>10</code></li>
+      <li><code>Load Behavior</code>: <code>Eager</code></li>
+      <li><code>bIsTransparent</code>: <code>true</code></li>
+    </ul>
+  </li>
+  <li><b>Activate in Blueprints</b>:
+    <ul>
+      <li>Get Subsystem: <code>Get SwuiDocumentManagerSubsystem</code></li>
+      <li>Call <code>Load Document Asset (DA_HUD)</code></li>
+      <li>Call <code>Activate Document ("MainHUD")</code></li>
+    </ul>
+  </li>
+  <li><b>Update State</b>: Call <code>Set State Number ("PlayerHealth", 100.0)</code> from Unreal.</li>
+  <li><b>Receive Events</b>: Bind to <code>On Navigation Event</code> to react when web buttons emit GameplayTags!</li>
+</ol>
+
+<div class="callout"><svg><use href="#i-zap"/></svg><p>No bundler or framework required for Path A — a single HTML file is a complete, transparent, layered in-game UI document.</p></div>
+`
   },
-  "installation": {
-    "t": "Installation",
-    "m": "plugin · npm",
-    "h": "\n<p>Install the SWUI plugin into your Unreal project's <code>Plugins</code> directory and enable it in the editor. The embedded CEF/Chromium runtime ships with the plugin for supported desktop platforms.</p>\n<h2>Frontend side (optional)</h2>\n<div class=\"sig\">npm i @swui/core\nnpm i @swui/react   # or @swui/vue · @swui/svelte\nnpm i -D @swui/cli</div>\n<div class=\"callout warn\"><svg><use href=\"#i-zap\"/></svg><p>See the repository for the current authoritative installation steps and license terms. Platform support is stated on the <a href=\"#/product\" class=\"acc\">product page</a>.</p></div>"
+
+  'installation': {
+    t: 'Installation & Setup',
+    m: 'plugin · UE 5.8.3 · npm',
+    h: `
+<p>SWUI is structured as an Unreal Engine plugin with companion npm packages for modern frontend projects.</p>
+
+<h2>1. Unreal Plugin Installation</h2>
+<ol>
+  <li>Clone or copy the <code>SWUI</code> repository into your project's <code>Plugins/</code> directory:
+    <div class="sig">YourProject/Plugins/SimpleWebUI/</div>
+  </li>
+  <li>Open your project in Unreal Engine 5.8.3. When prompted, compile the plugin modules:
+    <ul>
+      <li><code>SwuiRuntime</code>: Core CEF browser host, DirectX shared texture presenter, state bus, input preprocessor.</li>
+      <li><code>SwuiEditor</code>: Document Asset factory, details customizations, TypeScript contract generator.</li>
+      <li><code>SwuiUncookedOnly</code>: Custom K2 Blueprint nodes (<code>K2Node_SwuiCommandHook</code>, <code>K2Node_SwuiObserve</code>).</li>
+      <li><code>SwuiLoader</code>: Embedded CEF runtime bootstrap.</li>
+    </ul>
+  </li>
+  <li>Enable the plugin under <b>Edit &rarr; Plugins &rarr; User Interface &rarr; SimpleWebUI</b>.</li>
+</ol>
+
+<h2>2. Desktop Platform Support (CEF Backend)</h2>
+<div class="table-wrap">
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;font:400 13px var(--mono)">
+    <thead>
+      <tr style="border-bottom:2px solid var(--ln);text-align:left">
+        <th style="padding:8px">Platform</th>
+        <th style="padding:8px">Status</th>
+        <th style="padding:8px">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px">Windows x64</td>
+        <td style="padding:8px;color:var(--ok)">Primary Target</td>
+        <td style="padding:8px">Hardware-accelerated D3D11 shared textures</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px">Windows ARM64</td>
+        <td style="padding:8px;color:var(--warn)">Experimental</td>
+        <td style="padding:8px">Requires ARM64 CEF build</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px">macOS</td>
+        <td style="padding:8px;color:var(--ok)">Supported</td>
+        <td style="padding:8px">Desktop CEF backend available</td>
+      </tr>
+      <tr>
+        <td style="padding:8px">Linux</td>
+        <td style="padding:8px;color:var(--warn)">Experimental</td>
+        <td style="padding:8px">Desktop CEF backend available</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>3. Frontend Packages (Optional)</h2>
+<p>If building a modern web frontend with Vite, React, Vue, or Svelte:</p>
+<div class="sig"># Core framework-agnostic client
+npm i @swui/core
+
+# Framework integrations
+npm i @swui/react   # or @swui/vue · @swui/svelte
+
+# Build CLI
+npm i -D @swui/cli</div>
+`
   },
-  "vanilla": {
-    "t": "Vanilla HTML",
-    "m": "no framework · no node",
-    "h": "\n<p>The simplest entry point: one file, zero tooling. The runtime injects the <code>swui</code> global into every document.</p>\n<h2>The whole HUD</h2>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">hud.html — script</span><span class=\"cf-lang\">js</span><button class=\"cf-copy\" data-copy=\"vanilla\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \"><span class=\"c\">// No framework. No Node. One file.</span></span><span class=\"cl\" data-n=\" 2 \"><span class=\"c\">// Content/UI/hud.html → USwuiDocumentAsset → done.</span></span><span class=\"cl\" data-n=\" 3 \"> </span><span class=\"cl\" data-n=\" 4 \">swui.<span class=\"f\">on</span>(<span class=\"s\">'Weapon.CurrentAmmo'</span>, v =&gt; {</span><span class=\"cl\" data-n=\" 5 \">  document.<span class=\"f\">querySelector</span>(<span class=\"s\">'#ammo'</span>).textContent = v;</span><span class=\"cl\" data-n=\" 6 \">});</span><span class=\"cl\" data-n=\" 7 \"> </span><span class=\"cl\" data-n=\" 8 \">swui.navigation.<span class=\"f\">onConfirm</span>(() =&gt; {</span><span class=\"cl\" data-n=\" 9 \">  document.activeElement?.<span class=\"f\">click</span>();</span><span class=\"cl\" data-n=\"10 \">});</span></pre></figure>\n<p>Point a <code>USwuiDocumentAsset</code> at the file, load it, activate it. The HUD appears in the Unreal viewport — transparent, layered, input-aware.</p>"
+
+  'vanilla': {
+    t: 'Vanilla HTML/CSS/JS Path',
+    m: 'zero-build · no node',
+    h: `
+<p>The simplest path for artists, technical designers, and scripters: one file, zero tooling. The embedded runtime automatically injects the <code>window.__SWUI__</code> global and dispatches native DOM events.</p>
+
+<h2>Complete Single-File HUD Example</h2>
+<div class="sig">&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;style&gt;
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 100vw; height: 100vh; overflow: hidden;
+      background: transparent; user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: white;
+    }
+    .hud-box {
+      position: absolute; bottom: 30px; left: 30px;
+      background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px; padding: 12px 20px;
+    }
+    .label { font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: bold; }
+    .value { font-size: 28px; font-weight: 800; color: #38bdf8; }
+    .btn {
+      margin-top: 8px; padding: 6px 12px; background: #0284c7;
+      border: none; border-radius: 4px; color: white; cursor: pointer;
+    }
+  &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div class="hud-box"&gt;
+    &lt;div class="label"&gt;Shield Power&lt;/div&gt;
+    &lt;div class="value" id="shield-text"&gt;100%&lt;/div&gt;
+    &lt;button class="btn" id="btn-recharge"&gt;Recharge&lt;/button&gt;
+  &lt;/div&gt;
+
+  &lt;script&gt;
+    // 1. Receive State from Unreal
+    document.addEventListener('swui:stateChange', function(e) {
+      if (e.detail && e.detail.key === 'PlayerShield') {
+        document.getElementById('shield-text').textContent = Math.round(e.detail.value) + '%';
+      }
+    });
+
+    // 2. Send GameplayTag Events to Unreal
+    document.getElementById('btn-recharge').addEventListener('click', function() {
+      window.__SWUI__.send(JSON.stringify({
+        type: 'navigation',
+        tag: 'Ability.ShieldRecharge',
+        payload: { amount: 25 }
+      }));
+    });
+  &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</div>
+`
   },
-  "documents": {
-    "t": "Documents",
-    "m": "layers · z-order · assets",
-    "h": "\n<p>Every UI is its own web document, managed independently by the runtime. Documents live in three primary layers.</p>\n<h2>Layers</h2>\n<ul><li><b>Persistent</b> — network info, ping, chat, global notifications. Survives level transitions.</li><li><b>Level</b> — HUD, minimap, crosshair, objective tracker. Removed during level travel.</li><li><b>Modal</b> — inventory, pause menu, skill tree, settings, dialogue, confirmations.</li></ul>\n<h2>Z-order</h2>\n<ul><li><b>0–9</b> background / persistent</li><li><b>10–49</b> gameplay HUD</li><li><b>50–99</b> contextual UI</li><li><b>100–199</b> interactive windows</li><li><b>200–299</b> system menus</li><li><b>300+</b> critical system dialogs</li></ul>\n<h2>USwuiDocumentAsset</h2>\n<p>The asset defines: Document ID, Entry URL, Layer, Z-order, Load behavior (lazy / eager), Transparency, Sleep behavior and Render mode.</p>\n<div class=\"callout\"><svg><use href=\"#i-zap\"/></svg><p>Try the interactive document stack and lifecycle on the <a href=\"#/\" class=\"acc\">homepage</a>.</p></div>"
+
+  'documents': {
+    t: 'Multi-Document Engine & Layers',
+    m: 'layers · z-order · assets',
+    h: `
+<p>In SWUI 3.0, the UI is not a single giant web app. Instead, multiple independent web documents are concurrently managed by <code>USwuiDocumentManagerSubsystem</code>. Each document has its own CEF browser host (<code>USwuiView</code>), Slate widget, and lifecycle.</p>
+
+<h2>Three Document Layers</h2>
+<div class="table-wrap">
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;font:400 13px var(--mono)">
+    <thead>
+      <tr style="border-bottom:2px solid var(--ln);text-align:left">
+        <th style="padding:8px">Layer</th>
+        <th style="padding:8px">Intended Usage</th>
+        <th style="padding:8px">Level Travel Persistence</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px;color:var(--acc);font-weight:600">Persistent</td>
+        <td style="padding:8px">Watermarks, ping/network telemetry, global chat, persistent notifications</td>
+        <td style="padding:8px"><b>Survives level travel</b> (not destroyed on map load)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px;color:var(--acc);font-weight:600">Level</td>
+        <td style="padding:8px">Gameplay HUD, minimap, crosshairs, objective trackers</td>
+        <td style="padding:8px">Unloaded automatically on level transition</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;color:var(--acc);font-weight:600">Modal</td>
+        <td style="padding:8px">Pause menu, inventory, character sheet, dialogue, settings</td>
+        <td style="padding:8px">Unloaded automatically on level transition</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>Recommended Z-Order Conventions</h2>
+<ul>
+  <li><b>0 &ndash; 9</b>: Background &amp; persistent system telemetry</li>
+  <li><b>10 &ndash; 49</b>: Gameplay HUD (vitals, hotbars, radar)</li>
+  <li><b>50 &ndash; 99</b>: Floating in-world markers &amp; contextual interaction prompts</li>
+  <li><b>100 &ndash; 199</b>: Interactive game windows (Inventory, Map, Character Sheet)</li>
+  <li><b>200 &ndash; 299</b>: System menus (Pause Menu, Options, Confirm Dialogs)</li>
+  <li><b>300+</b>: Critical modals (Fatal error popups, connection dropped alerts)</li>
+</ul>
+
+<h2>USwuiDocumentAsset Properties</h2>
+<p>Each document is defined by a <code>USwuiDocumentAsset</code> Data Asset containing:</p>
+<ul>
+  <li><code>DocumentId</code>: FName unique identifier (e.g. <code>MainHUD</code>, <code>Inventory</code>).</li>
+  <li><code>EntryURL</code>: Path relative to Content folder or <code>local://</code> URL.</li>
+  <li><code>Layer</code>: <code>ESwuiDocumentLayer::Level</code>, <code>Modal</code>, or <code>Persistent</code>.</li>
+  <li><code>ZOrder</code>: Integer determining visual compositing and hit-testing priority.</li>
+  <li><code>LoadBehavior</code>: <code>Eager</code> (loads at game start) or <code>Lazy</code> (loads on first activation).</li>
+  <li><code>bIsTransparent</code>: Enables alpha channel blending with the 3D scene.</li>
+  <li><code>bEnableSleep</code>: When hidden, suspends browser execution to save 100% CPU/GPU.</li>
+</ul>
+`
   },
-  "state": {
-    "t": "State",
-    "m": "bus · batching · API",
-    "h": "\n<p>Unreal publishes reflected properties to a global state bus. Documents subscribe to fields; only relevant listeners react. The frontend never polls.</p>\n<h2>Accumulate, then flush</h2>\n<p>Updates are accumulated during the frame and flushed as one atomic batch — every framework sees the same snapshot, once.</p>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">state.ts</span><span class=\"cf-lang\">ts</span><button class=\"cf-copy\" data-copy=\"state\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \"><span class=\"c\">// Read current state</span></span><span class=\"cl\" data-n=\" 2 \"><span class=\"k\">const</span> ammo = swui.state.<span class=\"f\">get</span>(<span class=\"s\">'Weapon.CurrentAmmo'</span>);</span><span class=\"cl\" data-n=\" 3 \"> </span><span class=\"cl\" data-n=\" 4 \"><span class=\"c\">// Subscribe to a single field</span></span><span class=\"cl\" data-n=\" 5 \">swui.state.<span class=\"f\">subscribe</span>(<span class=\"s\">'Weapon.CurrentSpread'</span>, v =&gt; {</span><span class=\"cl\" data-n=\" 6 \">  crosshair.<span class=\"f\">setSpread</span>(v);</span><span class=\"cl\" data-n=\" 7 \">});</span><span class=\"cl\" data-n=\" 8 \"> </span><span class=\"cl\" data-n=\" 9 \"><span class=\"c\">// Propagate a state patch</span></span><span class=\"cl\" data-n=\"10 \">swui.state.<span class=\"f\">update</span>({ <span class=\"s\">'UI.MenuVolume'</span>: <span class=\"n\">0.4</span> });</span><span class=\"cl\" data-n=\"11 \"> </span><span class=\"cl\" data-n=\"12 \"><span class=\"c\">// React once per frame, to the whole batch</span></span><span class=\"cl\" data-n=\"13 \">swui.state.<span class=\"f\">onBatch</span>(batch =&gt; {</span><span class=\"cl\" data-n=\"14 \">  stats.<span class=\"f\">beginFrame</span>(batch.version);</span><span class=\"cl\" data-n=\"15 \">});</span><span class=\"cl\" data-n=\"16 \"> </span><span class=\"cl\" data-n=\"17 \"><span class=\"c\">// Runtime tick — engine time, not wall time</span></span><span class=\"cl\" data-n=\"18 \">swui.state.<span class=\"f\">onTick</span>(({ dt, time, paused }) =&gt; {</span><span class=\"cl\" data-n=\"19 \">  <span class=\"k\">if</span> (!paused) world.<span class=\"f\">step</span>(dt);</span><span class=\"cl\" data-n=\"20 \">});</span></pre></figure>\n<h2>Runtime data</h2>\n<p>The SDK also exposes runtime timing: <code>fps</code>, <code>dt</code>, <code>time</code>, <code>frameIndex</code>, <code>stateVersion</code>, <code>cefFps</code>, <code>width</code>, <code>height</code>, <code>timeDilation</code> and <code>paused</code> — so UI animation can be driven by game time, not wall time.</p>"
+
+  'lifecycle': {
+    t: 'Document Lifecycle & States',
+    m: 'states · preloading · sleep',
+    h: `
+<p>Every document operates as a deterministic finite-state machine governed by the subsystem:</p>
+
+<div class="sig">[Unloaded]
+   │
+   ▼ (Load / Preload)
+[Preloaded] ◄──────────────┐
+   │                       │
+   ▼ (Activate)            │ (Deactivate)
+[Active] ─────────────► [Sleeping]
+   │                       │
+   └──────────┬────────────┘
+              ▼ (Unload)
+         [Unloaded]</div>
+
+<h2>Lifecycle Operations</h2>
+<ul>
+  <li><b>Preload / Load</b>: Initializes the CEF Chromium instance and loads HTML/JS into memory in the background without attaching to the viewport. Eliminates frame hitches during gameplay.</li>
+  <li><b>Activate(OverrideZOrder)</b>: Attaches the Slate widget to the viewport, wakes Chromium's renderer (<code>WasHidden(false)</code>), and flushes current global state.</li>
+  <li><b>Deactivate()</b>: Detaches the widget from the viewport. If sleep is enabled, immediately triggers sleep.</li>
+  <li><b>Sleep()</b>: Calls Chromium's <code>WasHidden(true)</code> and halts scheduler timers. Chromium stops executing <code>requestAnimationFrame</code>, pauses JavaScript timers (<code>setTimeout</code>/<code>setInterval</code>), and reclaims 100% of GPU rendering time.</li>
+  <li><b>Wake()</b>: Calls <code>WasHidden(false)</code> and forces an immediate repaint (<code>PET_VIEW</code>).</li>
+  <li><b>Unload()</b>: Immediately invokes <code>USwuiView::Shutdown()</code>, releasing DirectX shared texture handles and destroying CEF browser host objects without waiting for garbage collection.</li>
+</ul>
+`
   },
-  "events": {
-    "t": "Events",
-    "m": "GameplayTags · payloads",
-    "h": "\n<p>Events flow both ways. The web side emits structured messages that arrive in Unreal as GameplayTag events; reflected Unreal events arrive in the document as typed subscriptions.</p>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">events.ts</span><span class=\"cf-lang\">ts</span><button class=\"cf-copy\" data-copy=\"events\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \"><span class=\"c\">// Web → Unreal (structured, tag-routed)</span></span><span class=\"cl\" data-n=\" 2 \">swui.events.<span class=\"f\">emit</span>(<span class=\"s\">'UI.Inventory.UseItem'</span>, {</span><span class=\"cl\" data-n=\" 3 \">  itemId: <span class=\"s\">'health_potion'</span>,</span><span class=\"cl\" data-n=\" 4 \">  slot: <span class=\"n\">2</span>,</span><span class=\"cl\" data-n=\" 5 \">});</span><span class=\"cl\" data-n=\" 6 \"> </span><span class=\"cl\" data-n=\" 7 \"><span class=\"c\">// Unreal → Web (reflected events as subscriptions)</span></span><span class=\"cl\" data-n=\" 8 \">swui.events.<span class=\"f\">on</span>(<span class=\"s\">'Weapon.OnPlayerFiredShot'</span>, ({ ammoRemaining }) =&gt; {</span><span class=\"cl\" data-n=\" 9 \">  ammoEl.textContent = ammoRemaining;</span><span class=\"cl\" data-n=\"10 \">});</span><span class=\"cl\" data-n=\"11 \"> </span><span class=\"cl\" data-n=\"12 \"><span class=\"c\">// Gamepad-grade navigation, routed by the runtime</span></span><span class=\"cl\" data-n=\"13 \">swui.events.<span class=\"f\">emitNavigation</span>(<span class=\"s\">'confirm'</span>);</span></pre></figure>\n<h2>Tag conventions</h2>\n<p>Tags such as <code>UI.Inventory.UseItem</code> or <code>UI.Menu.Resume</code> map cleanly onto Unreal's GameplayTag hierarchy — handlers stay declarative on the engine side.</p>"
+
+  'state': {
+    t: 'State Bus & Atomic Batching',
+    m: 'IPC · batching · zero-polling',
+    h: `
+<p>In traditional web UI integrations, game code calls <code>ExecuteJavaScript("state.health = 80")</code> for each modified property. At 60 FPS across dozens of fields, this causes serious performance degradation due to V8 string parsing stalls, repeated IPC round-trips, and layout thrashing.</p>
+
+<h2>SWUI 3.0 Atomic Frame Batching</h2>
+<p>SWUI 3.0 accumulates all state changes during a frame and flushes them as a single atomic batch at the start of each engine tick:</p>
+
+<div class="sig">// 1. Game calls during the frame:
+DocSubsystem-&gt;SetStateNumber(FName("PlayerHealth"), 80.0f);
+DocSubsystem-&gt;SetStateNumber(FName("Ammo"), 25.0f);
+DocSubsystem-&gt;SetStateNumber(FName("Shield"), 50.0f);
+
+// 2. Flushed as ONE JSON batch before render:
+{ "PlayerHealth": 80, "Ammo": 25, "Shield": 50 }</div>
+
+<h2>Frontend Reception</h2>
+<p>A single microtask applies all changes atomically:</p>
+<div class="sig">(function(){
+  var s = window.__SWUI__ = window.__SWUI__ || {};
+  var u = { "PlayerHealth": 80, "Ammo": 25, "Shield": 50 };
+  if (s._batch) {
+    s._batch(u);
+  } else {
+    for (var k in u) {
+      s.state[k] = u[k];
+      document.dispatchEvent(new CustomEvent('swui:stateChange', { detail: { key: k, value: u[k] } }));
+    }
+  }
+})();</div>
+
+<p>Frontend frameworks (React 18, Vue 3, Svelte) batch all DOM changes into a single render pass without screen tearing or repeated microtask overhead.</p>
+
+<h2>Engine Telemetry Exposed to State</h2>
+<p>The state bus also exposes real engine timing: <code>fps</code>, <code>dt</code>, <code>time</code>, <code>frameIndex</code>, <code>stateVersion</code>, <code>cefFps</code>, <code>timeDilation</code>, and <code>paused</code> &mdash; allowing animations to be driven by game time rather than browser wall-clock time.</p>
+`
   },
-  "input": {
-    "t": "Input",
-    "m": "pointer · keyboard · gamepad",
-    "h": "\n<h2>Pointer</h2>\n<p>One input surface, many documents. Every pointer event is hit-tested: visible, interactive, contains the pointer, highest Z-order wins. If no document accepts it, input falls through to gameplay.</p>\n<h2>Keyboard / text</h2>\n<p>Focused web inputs receive printable characters, modifiers and text events through the Slate input preprocessor into CEF. The routing architecture is designed to stay compatible with IME input flows on desktop.</p>\n<h2>Gamepad navigation</h2>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">navigation.ts</span><span class=\"cf-lang\">ts</span><button class=\"cf-copy\" data-copy=\"navigation\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \">swui.navigation.<span class=\"f\">onNavigate</span>(dir =&gt; focus.<span class=\"f\">move</span>(dir));</span><span class=\"cl\" data-n=\" 2 \"><span class=\"c\">// up | down | left | right</span></span><span class=\"cl\" data-n=\" 3 \"> </span><span class=\"cl\" data-n=\" 4 \">swui.navigation.<span class=\"f\">onConfirm</span>(()  =&gt; focus.<span class=\"f\">current</span>().<span class=\"f\">click</span>());</span><span class=\"cl\" data-n=\" 5 \">swui.navigation.<span class=\"f\">onCancel</span>(()   =&gt; <span class=\"f\">closeDocument</span>());</span><span class=\"cl\" data-n=\" 6 \">swui.navigation.<span class=\"f\">onNextTab</span>(()  =&gt; tabs.<span class=\"f\">next</span>());</span><span class=\"cl\" data-n=\" 7 \">swui.navigation.<span class=\"f\">onPreviousTab</span>(() =&gt; tabs.<span class=\"f\">prev</span>());</span></pre></figure>\n<h2>Input enablement</h2>\n<ul><li><b>Game Only</b> — everything goes to gameplay</li><li><b>Game + UI</b> — split by focus and document interactivity</li><li><b>UI Only</b> — the document captures everything</li></ul>"
+
+  'events': {
+    t: 'Two-Way Events & GameplayTags',
+    m: 'GameplayTags · bidirectional',
+    h: `
+<p>Events flow bidirectionally between Unreal Engine and web documents through structured GameplayTags rather than raw strings.</p>
+
+<h2>1. Web &rarr; Unreal: Emitting GameplayTags</h2>
+<p>From JavaScript, emit events using <code>window.__SWUI__.send()</code> or the SDK's <code>useSwuiEvent</code>:</p>
+
+<div class="sig">// Vanilla
+window.__SWUI__.send(JSON.stringify({
+  type: 'navigation',
+  tag: 'UI.Inventory.UseItem',
+  payload: { itemId: 'health_potion', slot: 2 }
+}));
+
+// React SDK
+const useItem = useSwuiEvent('UI.Inventory.UseItem');
+useItem({ itemId: 'health_potion', slot: 2 });</div>
+
+<h2>2. Receiving in Unreal (Blueprints / C++)</h2>
+<p>In your <code>PlayerController</code> or Game Mode:</p>
+<ol>
+  <li>Get <code>USwuiDocumentManagerSubsystem</code>.</li>
+  <li>Bind to <code>OnNavigationEvent</code> delegate.</li>
+  <li>Switch on <code>EventTag</code> (e.g. <code>UI.Inventory.UseItem</code>).</li>
+  <li>Parse <code>PayloadJson</code> or access reflected struct fields directly!</li>
+</ol>
+
+<h2>3. Unreal &rarr; Web: Reflected Delegates</h2>
+<p>Any <code>UPROPERTY(BlueprintAssignable)</code> delegate declared in C++ or Blueprint is automatically forwarded to active documents as a typed <code>CustomEvent</code>.</p>
+`
   },
-  "rendering": {
-    "t": "Rendering",
-    "m": "GPU · CPU · pacing · ROI",
-    "h": "\n<h2>GPU shared texture path</h2>\n<p>The primary accelerated path. Chromium renders off-screen; a shared GPU resource — Direct3D 11 / DXGI shared textures — lets the Unreal RHI consume the texture without staging the full frame through CPU memory.</p>\n<h2>CPU fallback</h2>\n<p>A full-surface renderer paints into a BGRA system-memory buffer, double-buffered and uploaded as an RHI texture update. It exists for platform compatibility and is not equivalent in throughput to the GPU path.</p>\n<h2>External begin frames</h2>\n<p>Unreal can drive Chromium's frame production rather than letting the browser free-run. The UI composites in step with the engine clock.</p>\n<h2>Region of interest</h2>\n<p>For mostly-transparent HUDs, SWUI tracks changed rectangles and blits only those regions — the unchanged majority of the surface is not repainted.</p>"
+
+  'delegate-payloads': {
+    t: 'Delegate Payloads & C++ Bridge',
+    m: 'C++ · reflection · ProcessEvent',
+    h: `
+<p>SWUI bridges Unreal dynamic multicast delegates to browser JavaScript. Rather than generating a custom C++ function for every delegate signature, SWUI implements an elegant reflection-driven bridge.</p>
+
+<h2>How the ProcessEvent Override Works</h2>
+<ol>
+  <li>When a delegate is observed via <code>USwuiSubsystem::ObserveDelegate</code>, SWUI creates a <code>USwuiDelegateBridge</code> instance.</li>
+  <li>It binds a generic hook function (<code>DelegateHook</code>) to the delegate.</li>
+  <li>When Unreal invokes <code>Broadcast()</code> on the delegate, it calls <code>ProcessEvent(Bridge, HookFunction, &amp;Params)</code>.</li>
+  <li>SWUI's <code>ProcessEvent</code> override intercepts the call and inspects the delegate's <code>SignatureFunction</code> metadata.</li>
+  <li>It iterates each parameter property (<code>FProperty</code>), reading its name and offset from the raw <code>Parms</code> buffer.</li>
+  <li>It serializes parameters into a JSON object matching the delegate's parameter names:
+    <div class="sig">{ "bSuccess": true, "ErrorMessage": "" }</div>
+  </li>
+  <li>It dispatches a native <code>CustomEvent</code> into the DOM:
+    <div class="sig">document.dispatchEvent(new CustomEvent("Online.OnRoomHostResult", { detail: json }));</div>
+  </li>
+</ol>
+
+<div class="callout"><svg><use href="#i-zap"/></svg><p>Because the reflection metadata is generated by UHT from the same delegate declaration, runtime parameter names and types always match the generated TypeScript contracts.</p></div>
+`
   },
-  "performance": {
-    "t": "Performance",
-    "m": "sleep · batching · budget",
-    "h": "\n<p>Performance in SWUI is architectural, not a benchmark claim:</p>\n<ul><li><b>Chromium sleep</b> — hidden documents suspend rAF, timers and compositing via WasHidden.</li><li><b>State batching</b> — one atomic flush per frame; N property changes become one evaluation per document.</li><li><b>CEF message-loop budget</b> — browser work is bounded per frame (<code>swui.cefMessageLoopBudgetMs</code>).</li><li><b>Preloading</b> — prepare documents before the player needs them.</li><li><b>ROI</b> — repaint only what changed.</li></ul>\n<p>Measure it yourself with the <a href=\"#/profiling\" class=\"acc\">profiler</a>.</p>"
+
+  'rendering': {
+    t: 'Direct3D 11 GPU Shared Textures',
+    m: 'GPU zero-copy · DXGI · CPU fallback',
+    h: `
+<p>SWUI negotiates between two distinct presentation pipelines based on operating system capabilities and platform flags:</p>
+
+<h2>1. GPU Direct3D 11 / DXGI Shared Textures (Primary)</h2>
+<p>On Windows platforms with DirectX 11 support:</p>
+<ol>
+  <li>Chromium renders off-screen into an accelerated DirectX surface.</li>
+  <li>CEF generates an NT shared resource handle (<code>HANDLE SharedHandle</code>).</li>
+  <li><code>FSwuiGpuSharedTextureHelper</code> opens this shared handle directly on Unreal's RHI device (<code>ID3D11Device::OpenSharedResource</code>).</li>
+  <li>On every <code>OnAcceleratedPaint</code> callback, Unreal executes a zero-copy GPU blit using RHI command lists (<code>CopySharedTexture</code>).</li>
+  <li><b>Zero CPU memory staging</b>: Pixel bytes never touch system RAM or CPU caches. This achieves a rock-solid 60&ndash;120 FPS at 4K resolution with near-zero CPU usage.</li>
+</ol>
+
+<h2>2. CPU Full-Surface Renderer (Fallback)</h2>
+<p>If GPU shared handles are unavailable or CPU mode is forced (<code>swui.forceCpuRenderer 1</code>):</p>
+<ol>
+  <li>Chromium writes BGRA8 pixel bytes into a system-memory buffer.</li>
+  <li><code>FSwuiFullSurfaceCpuRenderer</code> stages the buffer across a double-buffered thread pool.</li>
+  <li>On the game thread tick (<code>TickDeferredUpload</code>), dirty sub-rectangles are uploaded to Unreal's <code>UTexture2D</code> via <code>RHIUpdateTexture2D</code>.</li>
+</ol>
+`
   },
-  "blueprint": {
-    "t": "Blueprint & Codegen",
-    "m": "observe nodes · contracts",
-    "h": "\n<p>The Blueprint graph can be the source of truth. <code>SwuiObserve</code> and <code>SwuiObserveEvent</code> nodes declare what the UI can see; SWUI derives TypeScript binding information from them.</p>\n<div class=\"sig\">Blueprint graph → reflection → Refresh JS Bindings → bindings.gen.ts</div>\n<p>For the documented workflow, no separate manual class configuration is required — the observed properties and events become the generated contract directly.</p>\n<h2>Workflow</h2>\n<ol><li>Create SWUI Interface</li><li>Select HTML entry</li><li>Create Document Asset</li><li>Load · Activate</li><li>Bind state · bind events</li><li>Generate frontend contract</li></ol>"
+
+  'pacing': {
+    t: 'Frame Pacing & Compositing',
+    m: 'external begin frames · ROI',
+    h: `
+<p>Unconstrained web browsers attempt to render at display refresh rates, contending with Unreal's render thread. SWUI implements three frame-pacing mechanisms to eliminate contention:</p>
+
+<h2>1. External Begin Frames (Lockstep Compositing)</h2>
+<p>With <code>bUseExternalBeginFrames = true</code>, Chromium's internal timer is disabled:</p>
+<ul>
+  <li>On every engine frame, <code>USwuiView::SendExternalBeginFrameIfDue(DeltaTime)</code> calls <code>CefBrowserHost::SendExternalBeginFrame()</code>.</li>
+  <li>Chromium executes layout and produces exactly one UI frame synchronized with Unreal's frame clock.</li>
+  <li>Eliminates visual jitter and redundant repaints.</li>
+</ul>
+
+<h2>2. HUD ROI (Region of Interest) Partial Blitting</h2>
+<p>For gameplay HUDs where 90% of the screen is transparent and only corner widgets update (e.g. minimap or health bar):</p>
+<ul>
+  <li>Define rectangular Regions of Interest (<code>FSwuiHudRoiSettings</code>).</li>
+  <li>The presenter only uploads and blits pixels within active ROI boxes, skipping millions of unchanged transparent pixels each frame.</li>
+</ul>
+
+<h2>3. Key Best Practices</h2>
+<ul>
+  <li><b>Always set transparent background</b>: <code>body { background: transparent; }</code> and <code>bIsTransparent = true</code> on the document asset.</li>
+  <li><b>Disable text drag boxes</b>: <code>body { user-select: none; }</code>.</li>
+  <li><b>Prevent viewport scrolling</b>: <code>body { width: 100vw; height: 100vh; overflow: hidden; }</code>.</li>
+</ul>
+`
   },
-  "typescript": {
-    "t": "TypeScript",
-    "m": "generated types",
-    "h": "\n<p>State fields, event names, payloads, namespaces and value types are generated from Unreal reflection:</p>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">bindings.gen.ts</span><span class=\"cf-lang\">ts</span><button class=\"cf-copy\" data-copy=\"gen\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \"><span class=\"c\">// Generated by SWUI — do not edit.</span></span><span class=\"cl\" data-n=\" 2 \"><span class=\"c\">// Source of truth: Blueprint graph observation nodes.</span></span><span class=\"cl\" data-n=\" 3 \"> </span><span class=\"cl\" data-n=\" 4 \"><span class=\"k\">export</span> <span class=\"k\">interface</span> SwuiState {</span><span class=\"cl\" data-n=\" 5 \">  <span class=\"s\">'Player.Health'</span>: <span class=\"k\">number</span>;</span><span class=\"cl\" data-n=\" 6 \">  <span class=\"s\">'Player.Shield'</span>: <span class=\"k\">number</span>;</span><span class=\"cl\" data-n=\" 7 \">  <span class=\"s\">'Weapon.CurrentAmmo'</span>: <span class=\"k\">number</span>;</span><span class=\"cl\" data-n=\" 8 \">  <span class=\"s\">'Weapon.CurrentSpread'</span>: <span class=\"k\">number</span>;</span><span class=\"cl\" data-n=\" 9 \">  <span class=\"s\">'HUDState.CrosshairMode'</span>: <span class=\"s\">'PRECISE'</span> | <span class=\"s\">'EXPANDED'</span> | <span class=\"s\">'SNIPER'</span>;</span><span class=\"cl\" data-n=\"10 \">  <span class=\"s\">'Interaction.bCanInteract'</span>: <span class=\"k\">boolean</span>;</span><span class=\"cl\" data-n=\"11 \">  <span class=\"s\">'Interaction.Prompt'</span>: <span class=\"k\">string</span>;</span><span class=\"cl\" data-n=\"12 \">}</span><span class=\"cl\" data-n=\"13 \"> </span><span class=\"cl\" data-n=\"14 \"><span class=\"k\">export</span> <span class=\"k\">interface</span> SwuiEvents {</span><span class=\"cl\" data-n=\"15 \">  <span class=\"s\">'Weapon.OnPlayerFiredShot'</span>: {</span><span class=\"cl\" data-n=\"16 \">    gunType: <span class=\"k\">string</span>;</span><span class=\"cl\" data-n=\"17 \">    ammoRemaining: <span class=\"k\">number</span>;</span><span class=\"cl\" data-n=\"18 \">    spread: <span class=\"k\">number</span>;</span><span class=\"cl\" data-n=\"19 \">  };</span><span class=\"cl\" data-n=\"20 \">  <span class=\"s\">'Combat.OnHitConfirmed'</span>: { damage: <span class=\"k\">number</span> };</span><span class=\"cl\" data-n=\"21 \">  <span class=\"s\">'Weapon.Reload'</span>: Record&lt;<span class=\"k\">string</span>, never&gt;;</span><span class=\"cl\" data-n=\"22 \">}</span></pre></figure>\n<p>Unreal defines the contract. The web UI consumes the contract — with autocomplete.</p>"
+
+  'memory-cleanup': {
+    t: 'Deterministic Lifecycle & Cleanup',
+    m: 'memory · level travel · shutdown',
+    h: `
+<p>Managing multiple Chromium browser instances in an Unreal game requires deterministic resource cleanup rather than waiting for Unreal's non-deterministic Garbage Collection.</p>
+
+<h2>Immediate Shutdown (<code>USwuiView::Shutdown</code>)</h2>
+<p>When a document is unloaded, SWUI immediately executes synchronous destruction on the game thread:</p>
+<ul>
+  <li>Resets <code>FSwuiGpuSharedTextureHelper</code> and closes DirectX shared NT handles.</li>
+  <li>Calls <code>CefBrowserHost::CloseBrowser(true)</code> to cleanly terminate the CEF sub-process.</li>
+  <li>Clears smart pointers to browser hosts and client delegates.</li>
+  <li>Destroys the Slate presenter texture and frees GPU VRAM immediately.</li>
+</ul>
+
+<h2>Level Travel Unload Rules</h2>
+<p>When <code>FWorldDelegates::OnPreWorldFinishDestroy</code> triggers during level transitions:</p>
+<ul>
+  <li><code>USwuiDocumentManagerSubsystem::UnloadNonPersistentDocuments()</code> runs.</li>
+  <li>Documents in the <code>Level</code> and <code>Modal</code> layers are cleanly unloaded.</li>
+  <li>Documents in the <code>Persistent</code> layer (e.g. chat, party status, ping monitor) survive across level travel without stutter or reload.</li>
+</ul>
+`
   },
-  "react": {
-    "t": "React",
-    "m": "@swui/react",
-    "h": "\n<p>First-party hooks over the core runtime:</p>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">AmmoCounter.tsx</span><span class=\"cf-lang\">ts</span><button class=\"cf-copy\" data-copy=\"react\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \"><span class=\"k\">import</span> { useSwuiState, useSwuiEvent } <span class=\"k\">from</span> <span class=\"s\">'@swui/react'</span>;</span><span class=\"cl\" data-n=\" 2 \"> </span><span class=\"cl\" data-n=\" 3 \"><span class=\"k\">export</span> <span class=\"k\">function</span> <span class=\"f\">AmmoCounter</span>() {</span><span class=\"cl\" data-n=\" 4 \">  <span class=\"k\">const</span> ammo   = useSwuiState&lt;<span class=\"k\">number</span>&gt;(<span class=\"s\">'Weapon.CurrentAmmo'</span>, <span class=\"n\">30</span>);</span><span class=\"cl\" data-n=\" 5 \">  <span class=\"k\">const</span> reload = <span class=\"f\">useSwuiEvent</span>(<span class=\"s\">'Weapon.Reload'</span>);</span><span class=\"cl\" data-n=\" 6 \"> </span><span class=\"cl\" data-n=\" 7 \">  reload.<span class=\"f\">on</span>(() =&gt; <span class=\"f\">flash</span>(<span class=\"s\">'RELOADING'</span>));</span><span class=\"cl\" data-n=\" 8 \"> </span><span class=\"cl\" data-n=\" 9 \">  <span class=\"k\">return</span> &lt;div className=<span class=\"s\">\"ammo\"</span>&gt;{ammo}&lt;/div&gt;;</span><span class=\"cl\" data-n=\"10 \">}</span></pre></figure>\n<p><code>useSwuiState</code>, <code>useSwuiEvent</code>, <code>useSwuiNavigation</code> and <code>useSwuiTimeline</code> cover the documented React surface.</p>"
+
+  'input-routing': {
+    t: 'Input Preprocessing & Focus',
+    m: 'Slate · CEF input · text fields',
+    h: `
+<p>Handling input across multiple overlapping web documents requires deterministic layer routing through Slate.</p>
+
+<h2>Pointer & Mouse Routing</h2>
+<p>The engine registers <code>FSwuiInputPreprocessor</code> into Slate's global input pipeline:</p>
+<ol>
+  <li>On mouse move, click, or wheel, the preprocessor queries:
+    <div class="sig">USwuiDocumentManagerSubsystem::GetTopInteractiveViewAt(ScreenPosition)</div>
+  </li>
+  <li>The subsystem iterates active documents sorted in descending Z-Order.</li>
+  <li>It hit-tests each document via <code>ScreenToBrowserPixel</code>.</li>
+  <li>The highest Z-Order document containing the cursor receives the pointer event via <code>SendMouseMoveEvent</code> or <code>SendMouseClickEvent</code>.</li>
+  <li>If no document accepts the hit, input falls through to gameplay!</li>
+</ol>
+
+<h2>Native Keyboard & Text Input Forwarding</h2>
+<p>HTML <code>&lt;input&gt;</code>, <code>&lt;textarea&gt;</code>, and <code>&lt;select&gt;</code> elements receive real keyboard typing:</p>
+<ul>
+  <li><code>HandleKeyDownEvent</code> delivers <code>KEYEVENT_KEYDOWN</code> to CEF.</li>
+  <li>For printable characters, a synthesized <code>KEYEVENT_CHAR</code> is forwarded with Unicode mapping.</li>
+  <li>When an input is focused, <code>focus_on_editable_field = true</code> is set, enabling native Tab navigation and copy/paste shortcuts (Ctrl+C / Ctrl+V).</li>
+</ul>
+`
   },
-  "vue": {
-    "t": "Vue",
-    "m": "@swui/vue",
-    "h": "\n<p>Composition API bindings over the same contract:</p>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">composables.ts</span><span class=\"cf-lang\">ts</span><button class=\"cf-copy\" data-copy=\"vue\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \"><span class=\"k\">import</span> { useSwuiState, useSwuiEvent } <span class=\"k\">from</span> <span class=\"s\">'@swui/vue'</span>;</span><span class=\"cl\" data-n=\" 2 \"> </span><span class=\"cl\" data-n=\" 3 \"><span class=\"k\">const</span> health = <span class=\"f\">useSwuiState</span>(<span class=\"s\">'Player.Health'</span>, <span class=\"n\">100</span>);</span><span class=\"cl\" data-n=\" 4 \"><span class=\"k\">const</span> reload  = <span class=\"f\">useSwuiEvent</span>(<span class=\"s\">'Weapon.Reload'</span>);</span><span class=\"cl\" data-n=\" 5 \"> </span><span class=\"cl\" data-n=\" 6 \"><span class=\"c\">// Same contract, same GameplayTags —</span></span><span class=\"cl\" data-n=\" 7 \"><span class=\"c\">// only the rendering layer changes.</span></span><span class=\"cl\" data-n=\" 8 \"><span class=\"f\">defineComponent</span>({ template: <span class=\"s\">'&lt;div&gt;{{ health }}&lt;/div&gt;'</span> });</span></pre></figure>\n<p>State and events behave identically to the React integration — only the rendering layer changes.</p>"
+
+  'react-input-fields': {
+    t: 'React Input Controls',
+    m: 'React 18 · controlled inputs · IME',
+    h: `
+<p>Standard React controlled components work transparently inside SWUI without special APIs.</p>
+
+<h2>Example: Controlled Username Input</h2>
+<div class="sig">import React, { useState } from 'react';
+import { useSwuiEvent } from '@swui/react';
+
+export function UsernameInput() {
+  const [username, setUsername] = useState('Player');
+  const setUsernameEvent = useSwuiEvent('Player.SetUsername');
+
+  const commit = () => {
+    setUsernameEvent({ username });
+  };
+
+  return (
+    &lt;div className="input-group"&gt;
+      &lt;label&gt;Pilot Name:&lt;/label&gt;
+      &lt;input
+        value={username}
+        onChange={e =&gt; setUsername(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e =&gt; { if (e.key === 'Enter') commit(); }}
+        placeholder="Enter name..."
+      /&gt;
+    &lt;/div&gt;
+  );
+}</div>
+
+<h2>Suppressing Gameplay Input While Typing</h2>
+<p>When an HTML input element is focused, <code>USwuiSubsystem::IsTextInputFocused()</code> returns <code>true</code>:</p>
+<div class="sig">// In your PlayerController or Character:
+if (SwuiSubsystem-&gt;IsTextInputFocused()) {
+    // Suppress WASD movement, jumping, firing while typing in chat
+    return;
+}</div>
+`
   },
-  "svelte": {
-    "t": "Svelte",
-    "m": "@swui/svelte",
-    "h": "\n<p>Runtime-backed Svelte stores:</p>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">Crosshair.svelte</span><span class=\"cf-lang\">ts</span><button class=\"cf-copy\" data-copy=\"svelte\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \">&lt;script&gt;</span><span class=\"cl\" data-n=\" 2 \">  <span class=\"k\">import</span> { swuiState, swuiEvent } <span class=\"k\">from</span> <span class=\"s\">'@swui/svelte'</span>;</span><span class=\"cl\" data-n=\" 3 \"> </span><span class=\"cl\" data-n=\" 4 \">  <span class=\"k\">const</span> spread = <span class=\"f\">swuiState</span>(<span class=\"s\">'Weapon.CurrentSpread'</span>, <span class=\"n\">0.3</span>);</span><span class=\"cl\" data-n=\" 5 \">  <span class=\"k\">const</span> fired  = <span class=\"f\">swuiEvent</span>(<span class=\"s\">'Weapon.OnPlayerFiredShot'</span>);</span><span class=\"cl\" data-n=\" 6 \"> </span><span class=\"cl\" data-n=\" 7 \">  <span class=\"c\">// A Svelte store backed by the runtime.</span></span><span class=\"cl\" data-n=\" 8 \">  $: gap = <span class=\"n\">6</span> + $spread * <span class=\"n\">42</span>;</span><span class=\"cl\" data-n=\" 9 \">&lt;/script&gt;</span><span class=\"cl\" data-n=\"10 \"> </span><span class=\"cl\" data-n=\"11 \">&lt;div <span class=\"k\">class</span>=<span class=\"s\">\"crosshair\"</span> style=<span class=\"s\">\"--gap: {gap}px\"</span>&gt;&lt;/div&gt;</span></pre></figure>\n<p>Unreal state → SWUI core → Svelte store → component. The store updates drive Svelte's reactivity directly.</p>"
+
+  'navigation': {
+    t: 'Gamepad & Menu Navigation',
+    m: 'SwuiNavigation · controller',
+    h: `
+<p>Console games and gamepad-controlled menus require structured spatial navigation rather than mouse pointers.</p>
+
+<h2>Binding Unreal Input to SwuiNavigation</h2>
+<p>Map your Enhanced Input actions to <code>SwuiNavigation</code>:</p>
+<div class="sig">// Directional navigation
+D-Pad / Left Stick  &rarr; SwuiNavigation.Navigate(Direction)
+
+// Actions
+A / Cross / Enter   &rarr; SwuiNavigation.Confirm()
+B / Circle / Escape &rarr; SwuiNavigation.Cancel()
+LB / L1 / Prev Tab  &rarr; SwuiNavigation.PreviousTab()
+RB / R1 / Next Tab  &rarr; SwuiNavigation.NextTab()</div>
+
+<h2>Consuming Navigation in JavaScript</h2>
+<div class="sig">import { useSwuiNavigation } from '@swui/react';
+
+export function Menu() {
+  useSwuiNavigation({
+    onNavigate: (direction) =&gt; focusManager.move(direction),
+    onConfirm: () =&gt; activeItem.trigger(),
+    onCancel: () =&gt; menu.close(),
+    onNextTab: () =&gt; tabs.next(),
+    onPreviousTab: () =&gt; tabs.previous()
+  });
+
+  return &lt;nav&gt;...&lt;/nav&gt;;
+}</div>
+`
   },
-  "cli": {
-    "t": "CLI & Config",
-    "m": "@swui/cli",
-    "h": "\n<p><code>swui dev</code> starts the development workflow with live reload. <code>swui build --production</code> produces static assets for the Unreal runtime. The CLI detects frontend project structure — Vite configurations, and Next.js static-export projects.</p>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">swui.config.ts</span><span class=\"cf-lang\">ts</span><button class=\"cf-copy\" data-copy=\"config\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \"><span class=\"k\">import</span> { defineConfig } <span class=\"k\">from</span> <span class=\"s\">'@swui/cli'</span>;</span><span class=\"cl\" data-n=\" 2 \"> </span><span class=\"cl\" data-n=\" 3 \"><span class=\"k\">export</span> <span class=\"k\">default</span> <span class=\"f\">defineConfig</span>({</span><span class=\"cl\" data-n=\" 4 \">  name: <span class=\"s\">'MainHUD'</span>,</span><span class=\"cl\" data-n=\" 5 \">  framework: <span class=\"s\">'react'</span>,</span><span class=\"cl\" data-n=\" 6 \">  entry: <span class=\"s\">'src/main.tsx'</span>,</span><span class=\"cl\" data-n=\" 7 \">  output: <span class=\"s\">'dist'</span>,</span><span class=\"cl\" data-n=\" 8 \">  runtime: {</span><span class=\"cl\" data-n=\" 9 \">    layer: <span class=\"s\">'level'</span>,</span><span class=\"cl\" data-n=\"10 \">    loadBehavior: <span class=\"s\">'eager'</span>,</span><span class=\"cl\" data-n=\"11 \">    frameRate: <span class=\"n\">60</span>,</span><span class=\"cl\" data-n=\"12 \">  },</span><span class=\"cl\" data-n=\"13 \">});</span></pre></figure>\n<div class=\"callout warn\"><svg><use href=\"#i-zap\"/></svg><p><b>Next.js support means the CLI can detect and invoke a static-export build.</b> Server features are not implied to run inside the Unreal runtime — the delivered artifact is always static web output.</p></div>"
+
+  'react': {
+    t: 'React 18 Integration (@swui/react)',
+    m: 'hooks · state · events',
+    h: `
+<p>The official <code>@swui/react</code> package provides ergonomic React 18 hooks that subscribe to the global state bus and emit GameplayTag events.</p>
+
+<h2>Primary Hooks</h2>
+<div class="sig">import { useSwuiState, useSwuiEvent, useSwuiNavigation, useSwuiTimeline } from '@swui/react';
+
+export function WeaponHUD() {
+  // 1. Reactive state subscription (auto-batched)
+  const health = useSwuiState&lt;number&gt;('PlayerHealth', 100);
+  const ammo = useSwuiState&lt;number&gt;('Ammo', 30);
+
+  // 2. GameplayTag event emitter
+  const fireWeapon = useSwuiEvent('Weapon.Fire');
+  const reloadWeapon = useSwuiEvent('Weapon.Reload');
+
+  // 3. Engine-synchronized timeline
+  const { time, dt, paused } = useSwuiTimeline();
+
+  return (
+    &lt;div className="hud"&gt;
+      &lt;div className="health-bar" style={{ width: health + '%' }} /&gt;
+      &lt;div className="ammo-count"&gt;{ammo}&lt;/div&gt;
+      &lt;button onClick={() =&gt; reloadWeapon({ fast: true })}&gt;Reload&lt;/button&gt;
+    &lt;/div&gt;
+  );
+}</div>
+`
   },
-  "preview": {
-    "t": "Preview",
-    "m": "in development",
-    "h": "\n<p>The preview direction: open a dedicated window that loads your actual UI, uses the generated interface contract, exposes reflected state as controls, triggers reflected events, and runs the same frontend code in preview and in Unreal.</p>\n<div class=\"callout warn\"><svg><use href=\"#i-zap\"/></svg><p><b>The preview workflow is an active development area.</b> Controls shown on this site illustrate the intended direction and are not production-ready tooling.</p></div>\n<ul><li>float → slider</li><li>int → number</li><li>bool → checkbox</li><li>enum → dropdown</li><li>string → text input</li><li>event → trigger button</li></ul>"
+
+  'vue-svelte': {
+    t: 'Vue 3 & Svelte Stores',
+    m: 'composables · stores',
+    h: `
+<p>SWUI provides first-class integrations across all major modern frontend frameworks over the exact same state bus contract.</p>
+
+<h2>Vue 3 Composition API (<code>@swui/vue</code>)</h2>
+<div class="sig">import { defineComponent } from 'vue';
+import { useSwuiState, useSwuiEvent } from '@swui/vue';
+
+export default defineComponent({
+  setup() {
+    const health = useSwuiState('PlayerHealth', 100);
+    const reload = useSwuiEvent('Weapon.Reload');
+
+    return { health, reload };
   },
-  "profiling": {
-    "t": "Profiling",
-    "m": "diagnostics",
-    "h": "\n<p>Engine-style diagnostics: browser FPS, presented FPS, paint-to-present latency, state flushes, CEF budget and frame pacing. See the live <a href=\"#/profiling\" class=\"acc\">profiler page</a> and the console commands documented there.</p>"
+  template: "\n    &lt;div class=\"vitals\"&gt;\n      &lt;span&gt;HP: {{ health }}&lt;/span&gt;\n      &lt;button @click=\"reload({ fast: true })\"&gt;Reload&lt;/button&gt;\n    &lt;/div&gt;\n  "
+});</div>
+
+<h2>Svelte Stores (<code>@swui/svelte</code>)</h2>
+<div class="sig">&lt;script&gt;
+  import { swuiState, swuiEvent } from '@swui/svelte';
+
+  const health = swuiState('PlayerHealth', 100);
+  const reload = swuiEvent('Weapon.Reload');
+&lt;/script&gt;
+
+&lt;div class="vitals"&gt;
+  &lt;span&gt;HP: {$health}&lt;/span&gt;
+  &lt;button on:click={() =&gt; reload({ fast: true })}&gt;Reload&lt;/button&gt;
+&lt;/div&gt;</div>
+`
   },
-  "troubleshooting": {
-    "t": "Troubleshooting",
-    "m": "documented scenarios",
-    "h": "\n<h2>Transparency — UI appears black or white</h2>\n<p>The web page paints an opaque background over the world.</p>\n<ul><li>Set <code>body { background: transparent; }</code> in your CSS.</li><li>Enable transparency on the Document Asset.</li></ul>\n <figure class=\"code code-l\"><figcaption><span class=\"cf-file\">hud.css</span><span class=\"cf-lang\">css</span><button class=\"cf-copy\" data-copy=\"trcss\" aria-label=\"Copy code\"><svg><use href=\"#i-copy\"/></svg>copy</button></figcaption><pre><span class=\"cl\" data-n=\" 1 \">body {</span><span class=\"cl\" data-n=\" 2 \">  <span class=\"a\">background</span>: transparent;</span><span class=\"cl\" data-n=\" 3 \">}</span><span class=\"cl\" data-n=\" 4 \"> </span><span class=\"cl\" data-n=\" 5 \">/* <span class=\"a\">plus</span>: enable transparency</span><span class=\"cl\" data-n=\" 6 \">   on the USwuiDocumentAsset */</span></pre></figure>\n<h2>Keyboard — text input does not receive typing</h2>\n<ul><li>Check that the document has focus.</li><li>Check that pointer input is enabled for the document.</li><li>Check that the HTML input itself has focus inside the document.</li></ul>\n<h2>Dev server warning — localhost URL detected</h2>\n<p>A development localhost URL in a production document asset triggers a warning.</p>\n<div class=\"sig\">$ swui build --production</div>\n<p>Then point the Document Asset at the built static entry, e.g. <code>dist/index.html</code>.</p>\n<h2>Input falls through unexpectedly</h2>\n<ul><li>Verify the document's interactive flag and Z-order relative to overlapping documents.</li></ul>\n<h2>Document sleeps unexpectedly</h2>\n<ul><li>Check the sleep behavior — hidden documents are suspended via WasHidden by design.</li></ul>"
+
+  'cli': {
+    t: 'SWUI CLI & Production Build',
+    m: '@swui/cli · vite',
+    h: `
+<p>The <code>@swui/cli</code> package streamlines development and creates optimized production bundles for Unreal Engine.</p>
+
+<h2>Configuration (<code>swui.config.ts</code>)</h2>
+<div class="sig">import { defineConfig } from '@swui/cli';
+
+export default defineConfig({
+  name: 'MainHUD',
+  framework: 'react',
+  entry: 'src/main.tsx',
+  output: 'dist',
+  runtime: {
+    layer: 'level',
+    loadBehavior: 'eager',
+    frameRate: 60,
+  }
+});</div>
+
+<h2>Commands</h2>
+<ul>
+  <li><code>npx swui dev</code>: Starts local Vite dev server with Hot Module Replacement (HMR).</li>
+  <li><code>npx swui build --production</code>: Compiles the frontend into self-contained static assets in <code>dist/</code> without external server dependencies.</li>
+</ul>
+`
+  },
+
+  'recipe-hud-inventory': {
+    t: 'Recipe: Gameplay HUD + Modal Inventory',
+    m: 'practical guide · HUD + inventory',
+    h: `
+<p>A complete recipe for an in-game HUD that stays visible during gameplay and an Inventory screen that opens on keypress (<kbd>I</kbd> or <kbd>Tab</kbd>), captures pointer input, and closes on <kbd>Escape</kbd>.</p>
+
+<h2>1. Create Two Document Assets</h2>
+<ul>
+  <li><b><code>DA_MainHUD</code></b>:
+    <ul>
+      <li><code>DocumentId</code>: <code>MainHUD</code></li>
+      <li><code>Layer</code>: <code>Level</code>, <code>ZOrder</code>: <code>10</code>, <code>LoadBehavior</code>: <code>Eager</code></li>
+    </ul>
+  </li>
+  <li><b><code>DA_Inventory</code></b>:
+    <ul>
+      <li><code>DocumentId</code>: <code>Inventory</code></li>
+      <li><code>Layer</code>: <code>Modal</code>, <code>ZOrder</code>: <code>100</code>, <code>LoadBehavior</code>: <code>Lazy</code>, <code>bEnableSleep</code>: <code>true</code></li>
+    </ul>
+  </li>
+</ul>
+
+<h2>2. Blueprint Input Action (PlayerController)</h2>
+<div class="sig">[Input Action: ToggleInventory]
+  &rarr; Get SwuiDocumentManagerSubsystem &rarr; Get Document ("Inventory")
+  &rarr; Is Active?
+     TRUE:  Deactivate Document ("Inventory")
+            Set Show Mouse Cursor: false
+            Set Input Mode Game Only
+     FALSE: Activate Document ("Inventory", OverrideZOrder: 100)
+            Set Show Mouse Cursor: true
+            Set Input Mode Game and UI</div>
+
+<h2>3. Using Items from Web UI</h2>
+<div class="sig">// In inventory.html:
+window.__SWUI__.send(JSON.stringify({
+  type: "navigation",
+  tag: "UI.Inventory.UseItem",
+  payload: { itemId: "health_potion", slot: 2 }
+}));</div>
+`
+  },
+
+  'recipe-pause-menu': {
+    t: 'Recipe: Pause Menu with World Paused',
+    m: 'practical guide · pause menu',
+    h: `
+<p>When pausing a single-player game, you want the 3D world frozen, but the web UI fully animated and interactive.</p>
+
+<h2>Blueprint Setup</h2>
+<ol>
+  <li><b>On Pause Pressed (Escape)</b>:
+    <div class="sig">Set Game Paused: true
+Get SwuiDocumentManagerSubsystem &rarr; Activate Document ("PauseMenu", OverrideZOrder: 200)
+Set Show Mouse Cursor: true
+Set Input Mode UI Only</div>
+  </li>
+  <li><b>Inside pause_menu.html</b>:
+    <div class="sig">document.getElementById('btn-resume').addEventListener('click', () =&gt; {
+  window.__SWUI__.send(JSON.stringify({ type: 'navigation', tag: 'UI.Menu.Resume' }));
+});</div>
+  </li>
+  <li><b>In Blueprint OnNavigationEvent</b>:
+    <div class="sig">When EventTag == UI.Menu.Resume:
+Get SwuiDocumentManagerSubsystem &rarr; Deactivate Document ("PauseMenu")
+Set Game Paused: false
+Set Show Mouse Cursor: false
+Set Input Mode Game Only</div>
+  </li>
+</ol>
+
+<div class="callout"><svg><use href="#i-zap"/></svg><p>Because <code>USwuiDocumentManagerSubsystem</code> implements <code>FTickableGameObject</code> with <code>TickableWhenPaused = true</code>, UI animations, button hovers, and sounds continue playing at full frame rate while the game world is paused.</p></div>
+`
+  },
+
+  'recipe-preloading': {
+    t: 'Recipe: Zero-Stutter Level Preloading',
+    m: 'practical guide · level travel',
+    h: `
+<p>Loading heavy web bundles, 3D CSS animations, or high-res UI assets during level gameplay can cause micro-stutters. SWUI 3.0 provides zero-stutter background preloading.</p>
+
+<h2>Workflow</h2>
+<ol>
+  <li>During map travel or a loading screen:
+    <div class="sig">// C++
+USwuiDocumentManagerSubsystem* DocMgr = GetGameInstance()-&gt;GetSubsystem&lt;USwuiDocumentManagerSubsystem&gt;();
+DocMgr-&gt;PreloadDocument(FName("Level02HUD"));
+
+// Blueprints: Call "Preload Document" ("Level02HUD")</div>
+  </li>
+  <li>CEF initializes and loads HTML, CSS, and scripts in the background without attaching to the viewport.</li>
+  <li>Once the level fades in:
+    <div class="sig">DocMgr-&gt;ActivateDocument(FName("Level02HUD"));</div>
+  </li>
+  <li>The HUD appears instantly at 60+ FPS with zero layout or compilation hitch!</li>
+</ol>
+`
+  },
+
+  'recipe-in-world-screens': {
+    t: 'Recipe: 3D In-World Mesh Screens',
+    m: 'practical guide · actor component',
+    h: `
+<p>For in-world interactive terminals (such as sci-fi consoles or vehicle cockpit dashboards) attached to 3D meshes in the game world:</p>
+
+<h2>Setup Steps</h2>
+<ol>
+  <li>Add a <code>USwui</code> component to your Actor.</li>
+  <li>In the Details panel, assign the <code>Document Asset</code> property to your <code>USwuiDocumentAsset</code> (e.g. <code>DA_TerminalScreen</code>).</li>
+  <li>Set <code>RenderMode</code> to <code>CpuCompatible</code> or <code>GpuAccelerated</code>.</li>
+  <li>The component automatically registers with <code>USwuiDocumentManagerSubsystem</code> and passes the rendered <code>UTexture2D</code> directly to your actor mesh's Dynamic Material Instance!</li>
+</ol>
+`
+  },
+
+  'profiling': {
+    t: 'Diagnostic CVars & Profiling',
+    m: 'CVars · profiler · diagnostics',
+    h: `
+<p>SWUI provides dedicated diagnostic console variables to measure frame pacing, latency, and resource utilization in the Unreal Editor or packaged builds:</p>
+
+<div class="table-wrap">
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;font:400 13px var(--mono)">
+    <thead>
+      <tr style="border-bottom:2px solid var(--ln);text-align:left">
+        <th style="padding:8px">Command</th>
+        <th style="padding:8px">Default</th>
+        <th style="padding:8px">Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px;color:var(--acc)">swui.debug.Stats 1</td>
+        <td style="padding:8px">0</td>
+        <td style="padding:8px">Prints periodic telemetry: Browser FPS, Presented FPS, Paint-to-Present latency, state flushes.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px;color:var(--acc)">swui.verbosePaint 1</td>
+        <td style="padding:8px">0</td>
+        <td style="padding:8px">Logs all paint callbacks and texture upload dimensions.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px;color:var(--acc)">swui.hud.Lockstep 1</td>
+        <td style="padding:8px">0</td>
+        <td style="padding:8px">Forces CEF frame production to lockstep with Unreal Engine frames.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--ln2)">
+        <td style="padding:8px;color:var(--acc)">swui.hud.MaxBrowserFPS 60</td>
+        <td style="padding:8px">60</td>
+        <td style="padding:8px">Caps maximum browser rendering rate.</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;color:var(--acc)">swui.cefMessageLoopBudgetMs 1.5</td>
+        <td style="padding:8px">1.5</td>
+        <td style="padding:8px">Maximum game-thread time (ms) allowed for pumping CEF per tick.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`
+  },
+
+  'troubleshooting': {
+    t: 'Troubleshooting & Gotchas',
+    m: 'documented scenarios',
+    h: `
+<h2>1. Transparency: UI background is solid black or white</h2>
+<ul>
+  <li>In CSS, ensure <code>body { background: transparent; }</code>.</li>
+  <li>On the <code>USwuiDocumentAsset</code>, ensure <code>bIsTransparent = true</code>.</li>
+</ul>
+
+<h2>2. Text Fields: Keyboard typing not received</h2>
+<ul>
+  <li>Ensure the document's widget has focus and pointer input is enabled (<code>SetPointerInputEnabled(true)</code>).</li>
+  <li>Verify that you clicked inside the <code>&lt;input&gt;</code> element to establish DOM focus.</li>
+</ul>
+
+<h2>3. Warning: "Development dev-server detected"</h2>
+<ul>
+  <li>You loaded an unbundled URL pointing to <code>http://localhost:5173</code> in a shipping build.</li>
+  <li>Run <code>npx swui build --production</code> and point the document asset at <code>dist/index.html</code>.</li>
+</ul>
+
+<h2>4. Input falls through unexpectedly</h2>
+<ul>
+  <li>Verify that the document's layer and Z-order are higher than underlying interactive elements.</li>
+  <li>Check that the document's widget is not marked hit-test invisible in Slate.</li>
+</ul>
+`
   }
 };

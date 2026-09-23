@@ -106,3 +106,4 @@ export function observeReveal(root: HTMLElement = document.body) {
   )
   root.querySelectorAll('.rv').forEach(n => (RM ? n.classList.add('in') : io.observe(n)))
 }
+
